@@ -1,0 +1,4 @@
+name = "OrderedPreferences"
+uuid = "f28deaa9-7646-4bae-9ba6-b7789ef42b8a"
+authors = ["leedh0124 <35527664+leedh0124@users.noreply.github.com>"]
+version = "0.1.0"
