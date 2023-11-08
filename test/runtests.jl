@@ -1,8 +1,6 @@
 using OrderedPreferences
 using Test: @testset, @test
 
-# TODO: Make a for loop that solves nested linear optimization problem 
-
 @testset "OptimizationTests" begin
     f(x, θ) = sum(x)
     g(x, θ) = [sum(x .^ 2) - 1]

@@ -75,8 +75,6 @@ function build_parametric_optim(problem::ParametricOptimizationProblem, preferen
             inequality_dimension = inner_problem.inequality_dimension + 2, 
             )
 
-        #Main.@infiltrate
-
         # Initial guess 
         z₀ = vcat(primals, zeros(total_dim(inner_problem) - inner_problem.primal_dimension + 1))
 
@@ -88,6 +86,33 @@ function build_parametric_optim(problem::ParametricOptimizationProblem, preferen
         println("info: ", info)
     end
 
+    # Solve the relaxed version of original problem (change inequality constraint only)
+    slack_value = reverse(primals[primal_dimension + 1:end])
+    gᵣ(x,θ) = vcat(problem.inequality_constraint(x,θ)[1:no_preference],
+    problem.inequality_constraint(x,θ)[no_preference + 1:end] + slack_value
+    )
+ 
+    relaxed_problem = ParametricOptimizationProblem(;
+        objective = problem.objective, 
+        equality_constraint = problem.equality_constraint,
+        inequality_constraint = gᵣ,
+        parameter_dimension = problem.parameter_dimension,
+        primal_dimension = problem.primal_dimension, 
+        equality_dimension = problem.equality_dimension, 
+        inequality_dimension = problem.inequality_dimension, 
+        )
+
+    # Intial guess
+    z₀ = zeros(total_dim(problem))
+    z₀[1:problem.primal_dimension] = primals[1:problem.primal_dimension]
+
+    (; primals, variables, status, info) = solve(relaxed_problem, [0]; initial_guess = z₀)
+    println("Level: ", 0)
+    println("primals: ", primals)
+    println("variables: ", variables)
+    println("status: ", status)
+    println("info: ", info)
+    
     (; primals, variables, status, info)
 end
 
@@ -116,8 +141,6 @@ function simple_linear()
     
     (; primals, variables, status, info) = build_parametric_optim(problem, preference)
 
-    # TODO: Solve the relaxed version of original problem 
-    
 
 end 
 
