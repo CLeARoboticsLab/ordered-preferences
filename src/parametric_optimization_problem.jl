@@ -136,7 +136,7 @@ function solve(
         use_start = true,
     )
 
-    primals = z[1:problem.primal_dimension]
+    primals = z[1:(problem.primal_dimension)]
 
     (; primals, variables = z, status, info)
 end

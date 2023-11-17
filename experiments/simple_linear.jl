@@ -1,147 +1,167 @@
 using OrderedPreferences
 using BlockArrays: Block
 using LinearAlgebra
+using Dictionaries: Dictionaries, Dictionary, dictionary, sortkeys
 
 """
-Infeasible LP 
+Synthesizes a parametric ordered preferences problem from user functions
+"""
+# TODO
+#g(x,θ) = [g(x,θ); gₐ(x,θ)] # updated/merged inequality constraint
+#try_g(x,θ) = [g(x,θ)[1]; g(x,θ)[2]]
+
+function build_parametric_optim(;
+    objective,
+    equality_constraints,
+    inequality_constraints,
+    prioritized_inequality_constraints,
+    primal_dimension,
+    parameter_dimension,
+)
+    # Problem data
+    ordered_priority_levels = sort(collect(keys(prioritized_inequality_constraints)); rev = true)
+    outer_level = ordered_priority_levels[end]
+
+    dummy_primals = zeros(primal_dimension)
+    dummy_parameters = zeros(parameter_dimension)
+
+    equality_dimension = length(equality_constraints(dummy_primals, dummy_parameters))
+    inequality_dimension =
+        length(prioritized_inequality_constraints[outer_level](dummy_primals, dummy_parameters))
+
+    total_inner_slack_dimension = 0
+    inner_inequality_constraints = Any[inequality_constraints]
+
+    ordered_preferences_problem = ParametricOptimizationProblem[]
+
+    function set_up_level(priority_level)
+        parameter_dimension_ii = parameter_dimension + total_inner_slack_dimension
+
+        if isnothing(priority_level)
+            # the final level does not have any additional slacks
+            slack_dimension_ii = 0
+        else
+            prioritized_constraints_ii = prioritized_inequality_constraints[priority_level]
+            slack_dimension_ii = length(prioritized_constraints_ii(dummy_primals, dummy_parameters))
+        end
+
+        primal_dimension_ii = primal_dimension + slack_dimension_ii
+
+        if isnothing(priority_level)
+            objective_ii = objective
+        else
+            objective_ii = function (x, θ)
+                # everything beyond the original primal dimension are the slacks for this level
+                sum(x[(primal_dimension + 1):end] .^ 2)
+            end
+        end
+
+        inequality_constraints_ii = function (x, θ)
+            original_θ = θ[1:parameter_dimension]
+            fixed_slacks = θ[(parameter_dimension + 1):end]
+            @assert length(fixed_slacks) == total_inner_slack_dimension
+            slacks_ii = x[(primal_dimension + 1):end]
+            @assert length(slacks_ii) == slack_dimension_ii
+
+            unslacked_constraints =
+                mapreduce(vcat, inner_inequality_constraints) do constraint
+                    constraint(x, original_θ)
+                end + vcat(zeros(inequality_dimension), fixed_slacks)
+
+            if isnothing(priority_level)
+                return unslacked_constraints
+            end
+
+            vcat(unslacked_constraints, prioritized_constraints_ii(x, original_θ) .+ slacks_ii)
+        end
+
+        inequality_dimension_ii = let
+            dummy_primals_ii = zeros(primal_dimension_ii)
+            dummy_parameter_ii = zeros(parameter_dimension_ii)
+            length(inequality_constraints_ii(dummy_primals_ii, dummy_parameter_ii))
+        end
+
+        optimization_problem = ParametricOptimizationProblem(;
+            objective = objective_ii,
+            equality_constraint = equality_constraints,
+            inequality_constraint = inequality_constraints_ii,
+            parameter_dimension = parameter_dimension_ii,
+            primal_dimension = primal_dimension_ii,
+            equality_dimension = equality_dimension,
+            inequality_dimension = inequality_dimension_ii,
+        )
+
+        total_inner_slack_dimension += slack_dimension_ii
+        if !isnothing(priority_level)
+            push!(inner_inequality_constraints, prioritized_inequality_constraints[priority_level])
+        end
+        push!(ordered_preferences_problem, optimization_problem)
+    end
+
+    for priority_level in ordered_priority_levels
+        set_up_level(priority_level)
+    end
+    set_up_level(nothing)
+
+    ordered_preferences_problem
+end
+
+# TODO: for now `ordered_preferences_problem` is a vector of ParametricOptimizationProblem,
+# could introduce a struct for that
+# TODO: allow for user-defined warm-starting
+function solve_ordered_preferences(ordered_preferences_problem, θ)
+    outer_problem = last(ordered_preferences_problem)
+
+    # Initial guess:
+    fixed_slacks = Float64[]
+
+    # TODO: optimize this
+    inner_solution = nothing
+    for optimization_problem in ordered_preferences_problem
+        initial_guess = zeros(total_dim(optimization_problem))
+        if !isnothing(inner_solution)
+            initial_guess[1:(optimization_problem.primal_dimension)] =
+                inner_solution.primals[1:(optimization_problem.primal_dimension)]
+        end
+
+        parameter_value = vcat(θ, fixed_slacks)
+        solution = solve(optimization_problem, parameter_value; initial_guess)
+        append!(fixed_slacks, solution.primals[(outer_problem.primal_dimension + 1):end])
+        inner_solution = solution
+    end
+
+    inner_solution
+end
+
+"""
+Infeasible LP
 min₍ₓ₁,ₓ₂₎  x₁ + x₂
 s.t.        g₁(x₁, x₂) = x₁ ≥ 6,
             g₂(x₁, x₂) = x₂ ≥ 6
             g₃(x₁, x₂) = x₁ + x₂ ≤ 11
 Assume g₃ more important than g₂, i.e. innermost problem minimizes slack for g₃.
 """
-# TODO  
-    #g(x,θ) = [g(x,θ); gₐ(x,θ)] # updated/merged inequality constraint 
-    #try_g(x,θ) = [g(x,θ)[1]; g(x,θ)[2]]
-
-function build_parametric_optim(problem::ParametricOptimizationProblem, preference)
-
-    # Count number of constraints with preferences
-    count_preference = count(x -> x !=0 , preference) 
-
-    # Indices of constraints without preferences
-    no_preference = problem.inequality_dimension - count_preference
-
-    # Problem data
-    parameter_dimension = problem.parameter_dimension
-    primal_dimension = problem.primal_dimension
-    equality_dimension = problem.equality_dimension
-
-    # Start with innermost problem
-    J(x, θ) = x[primal_dimension + 1] 
-    f(x,θ) = problem.equality_constraint(x,θ)
-    g(x,θ) = vcat(problem.inequality_constraint(x,θ)[1:no_preference], 
-            [problem.inequality_constraint(x,θ)[end] + x[primal_dimension + 1],
-            x[primal_dimension + 1]]
-            )     
-
-    inner_problem = ParametricOptimizationProblem(;
-        objective = J, 
-        equality_constraint = f,
-        inequality_constraint = g,
-        parameter_dimension = parameter_dimension,
-        primal_dimension = primal_dimension + 1,  
-        equality_dimension = equality_dimension, 
-        inequality_dimension = no_preference + 2, 
-        )
-    
-    # Initial guess: 
-    z₀ = zeros(total_dim(inner_problem)) 
-
-    (; primals, variables, status, info) = solve(inner_problem, [0]; initial_guess = z₀)
-    println("Level: ", count_preference)
-    println("primals: ", primals)
-    println("variables: ", variables)
-    println("status: ", status)
-    println("info: ", info)
-
-    # Loop over intermediate levels
-    for ii ∈ count_preference-1:-1:1
-        
-        Jᵢ(x,θ) = x[inner_problem.primal_dimension + 1]
-        fᵢ(x,θ) = problem.equality_constraint(x,θ)
-        gᵢ(x,θ) = vcat(inner_problem.inequality_constraint(x,θ), 
-                [problem.inequality_constraint(x,θ)[ii + no_preference] + x[inner_problem.primal_dimension + 1],
-                x[inner_problem.primal_dimension + 1]]
-                ) 
-
-        inner_problem = ParametricOptimizationProblem(;
-            objective = Jᵢ, 
-            equality_constraint = fᵢ,
-            inequality_constraint = gᵢ,
-            parameter_dimension = parameter_dimension,
-            primal_dimension = inner_problem.primal_dimension + 1, 
-            equality_dimension = equality_dimension, 
-            inequality_dimension = inner_problem.inequality_dimension + 2, 
-            )
-
-        # Initial guess 
-        z₀ = vcat(primals, zeros(total_dim(inner_problem) - inner_problem.primal_dimension + 1))
-
-        (; primals, variables, status, info) = solve(inner_problem, [0]; initial_guess = z₀)
-        println("Level: ", ii)
-        println("primals: ", primals)
-        println("variables: ", variables)
-        println("status: ", status)
-        println("info: ", info)
-    end
-
-    # Solve the relaxed version of original problem (change inequality constraint only)
-    slack_value = reverse(primals[primal_dimension + 1:end])
-    gᵣ(x,θ) = vcat(problem.inequality_constraint(x,θ)[1:no_preference],
-    problem.inequality_constraint(x,θ)[no_preference + 1:end] + slack_value
-    )
- 
-    relaxed_problem = ParametricOptimizationProblem(;
-        objective = problem.objective, 
-        equality_constraint = problem.equality_constraint,
-        inequality_constraint = gᵣ,
-        parameter_dimension = problem.parameter_dimension,
-        primal_dimension = problem.primal_dimension, 
-        equality_dimension = problem.equality_dimension, 
-        inequality_dimension = problem.inequality_dimension, 
-        )
-
-    # Intial guess
-    z₀ = zeros(total_dim(problem))
-    z₀[1:problem.primal_dimension] = primals[1:problem.primal_dimension]
-
-    (; primals, variables, status, info) = solve(relaxed_problem, [0]; initial_guess = z₀)
-    println("Level: ", 0)
-    println("primals: ", primals)
-    println("variables: ", variables)
-    println("status: ", status)
-    println("info: ", info)
-    
-    (; primals, variables, status, info)
-end
-
 function simple_linear()
 
     # Define Original (infeasible) Problem
-    J₀(x,θ) = sum(x)
-    f(x,θ) = [0] 
-    g(x,θ) = [x[1] - 6.0, 
-              x[2] - 6.0, 
-             -x[1] - x[2] + 11.0,
-            ]
-    
-    # Define preferences for constraint ordering  #[0,...,0,1,2,...,n]
-    preference = [0, 1, 2]
+    objective(x, θ) = sum(x)
+    equality_constraints(x, θ) = [0]
+    inequality_constraints(x, θ) = [x[1] - 6.0]
+    prioritized_inequality_constraints = dictionary([ #
+        1 => function (x, θ)
+            [x[2] - 6.0]
+        end,
+        2 => function (x, θ)
+            [-x[1] - x[2] + 11.0]
+        end,
+    ])
 
-    problem = ParametricOptimizationProblem(;
-        objective = J₀, 
-        equality_constraint = f,
-        inequality_constraint = g,
+    build_parametric_optim(;
+        objective,
+        equality_constraints,
+        inequality_constraints,
+        prioritized_inequality_constraints,
+        primal_dimension = 2,
         parameter_dimension = 1,
-        primal_dimension = 2, 
-        equality_dimension = 1, 
-        inequality_dimension = 3,
-        )
-    
-    (; primals, variables, status, info) = build_parametric_optim(problem, preference)
-
-
-end 
-
-
+    )
+end
