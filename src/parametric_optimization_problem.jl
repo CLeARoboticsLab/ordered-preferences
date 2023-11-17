@@ -56,7 +56,7 @@ function ParametricOptimizationProblem(;
     total_dimension = primal_dimension + equality_dimension + inequality_dimension
 
     # Define symbolic variables for this MCP.
-    @variables z̃[1:total_dimension]
+    Symbolics.@variables z̃[1:total_dimension]
     z = BlockArray(
         Symbolics.scalarize(z̃),
         [primal_dimension, equality_dimension, inequality_dimension],
@@ -66,7 +66,7 @@ function ParametricOptimizationProblem(;
     μ = z[Block(3)]
 
     # Define a symbolic variable for the parameters.
-    @variables θ̃[1:(parameter_dimension)]
+    Symbolics.@variables θ̃[1:(parameter_dimension)]
     θ = Symbolics.scalarize(θ̃)
 
     # Build symbolic expressions for objective and constraints.
