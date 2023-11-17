@@ -1,0 +1,19 @@
+name: CI
+on: [push]
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        julia_version: ["1"]
+    name: julia ${{ matrix.julia_version }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: julia-actions/setup-julia@v1
+        with:
+          version: ${{ matrix.julia_version }}
+      - uses: julia-actions/cache@v1
+        with:
+          cache-registries: "true"
+      - uses: julia-actions/julia-runtest@latest
