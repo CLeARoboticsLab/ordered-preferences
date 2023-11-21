@@ -20,25 +20,23 @@ https://github.com/chkwon/Complementarity.jl/tree/master
 """
 
 "Generic description of a constrained optimization problem."
-struct ParametricOptimizationProblem{T1,T2,T3,T4}
+struct ParametricOptimizationProblem{T1,T2,T3,T4<:ParametricMCP}
     "Objective function"
     objective::T1
     "Equality constraint"
     equality_constraint::T2
     "Inequality constraint"
     inequality_constraint::T3
-
     "Dimension of parameter vector"
-    parameter_dimension::T4
+    parameter_dimension::Int
     "Dimension of primal variable"
-    primal_dimension::T4
+    primal_dimension::Int
     "Dimension of equality constraint"
-    equality_dimension::T4
+    equality_dimension::Int
     "Dimension of inequality constraint"
-    inequality_dimension::T4
-
+    inequality_dimension::Int
     "Corresponding parametric MCP"
-    parametric_mcp::ParametricMCP
+    parametric_mcp::T4
 end
 
 function ParametricOptimizationProblem(;
