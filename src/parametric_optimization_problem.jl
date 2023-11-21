@@ -45,7 +45,7 @@ function ParametricOptimizationProblem(;
     objective,
     equality_constraint,
     inequality_constraint,
-    parameter_dimension = 1,
+    parameter_dimension,
     primal_dimension,
     equality_dimension,
     inequality_dimension,
