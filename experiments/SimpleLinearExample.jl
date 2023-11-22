@@ -1,4 +1,6 @@
-using Dictionaries: Dictionaries, Dictionary, dictionary, sortkeys
+module SimpleLinearExample
+
+using Dictionaries: dictionary
 using OrderedPreferences
 
 """
@@ -32,4 +34,6 @@ function simple_linear()
         primal_dimension = 2,
         parameter_dimension = 0,
     )
+end
+
 end
