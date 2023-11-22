@@ -101,8 +101,6 @@ function ParametricOrderedPreferencesProblem(;
     ParametricOrderedPreferencesProblem(subproblems)
 end
 
-# TODO: for now `ordered_preferences_problem` is a vector of ParametricOptimizationProblem,
-# could introduce a struct for that
 # TODO: allow for user-defined warm-starting
 function solve(ordered_preferences_problem::ParametricOrderedPreferencesProblem, θ)
     outer_problem = last(ordered_preferences_problem.subproblems)
@@ -110,7 +108,7 @@ function solve(ordered_preferences_problem::ParametricOrderedPreferencesProblem,
     # Initial guess:
     fixed_slacks = Float64[]
 
-    # TODO: optimize this
+    # TODO: optimize allocation and type stability
     inner_solution = nothing
     for optimization_problem in ordered_preferences_problem.subproblems
         initial_guess = zeros(total_dim(optimization_problem))
