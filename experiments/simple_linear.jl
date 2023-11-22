@@ -13,7 +13,7 @@ function simple_linear()
 
     # Define Original (infeasible) Problem
     objective(x, θ) = sum(x)
-    equality_constraints(x, θ) = [0]
+    equality_constraints(x, θ) = []
     inequality_constraints(x, θ) = [x[1] - 6.0]
     prioritized_inequality_constraints = dictionary([ #
         1 => function (x, θ)
@@ -30,6 +30,6 @@ function simple_linear()
         inequality_constraints,
         prioritized_inequality_constraints,
         primal_dimension = 2,
-        parameter_dimension = 1,
+        parameter_dimension = 0,
     )
 end
