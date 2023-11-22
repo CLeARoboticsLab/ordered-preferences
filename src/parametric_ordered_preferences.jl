@@ -111,26 +111,50 @@ function ParametricOrderedPreferencesProblem(;
 end
 
 # TODO: allow for user-defined warm-starting
-function solve(ordered_preferences_problem::ParametricOrderedPreferencesProblem, θ = Float64[])
-    outer_problem = last(ordered_preferences_problem.subproblems)
+function solve(
+    ordered_preferences_problem::ParametricOrderedPreferencesProblem,
+    θ = Float64[];
+    warmstart_solution = nothing,
+)
+    outermost_problem = last(ordered_preferences_problem.subproblems)
 
-    # Initial guess:
     fixed_slacks = Float64[]
 
     # TODO: optimize allocation and type stability
-    inner_solution = nothing
+    if isnothing(warmstart_solution)
+        warmstart_primals = nothing
+        warmstart_slacks = nothing
+    else
+        warmstart_primals = warmstart_solution.primals
+        warmstart_slacks = warmstart_solution.slacks
+    end
+    local inner_solution
     for optimization_problem in ordered_preferences_problem.subproblems
         initial_guess = zeros(total_dim(optimization_problem))
-        if !isnothing(inner_solution)
-            initial_guess[1:(optimization_problem.primal_dimension)] =
-                inner_solution.primals[1:(optimization_problem.primal_dimension)]
+        if !isnothing(warmstart_primals)
+            # concatenate the outer primals (appearing in all subproblems) with the slacks for this
+            # level
+            slack_dimension_ii =
+                optimization_problem.primal_dimension - outermost_problem.primal_dimension
+            if !isnothing(warmstart_slacks)
+                fixed_slack_dimension = length(fixed_slacks)
+                slacks_ii_warmstart =
+                    warmstart_slacks[(fixed_slack_dimension + 1):(fixed_slack_dimension + slack_dimension_ii)]
+            else
+                slacks_ii_warmstart = zeros(slack_dimension_ii)
+            end
+            initial_guess[1:(optimization_problem.primal_dimension)] .= begin
+                vcat(warmstart_primals[1:(outermost_problem.primal_dimension)], slacks_ii_warmstart)
+            end
         end
 
         parameter_value = vcat(θ, fixed_slacks)
         solution = solve(optimization_problem, parameter_value; initial_guess)
-        append!(fixed_slacks, solution.primals[(outer_problem.primal_dimension + 1):end])
+        append!(fixed_slacks, solution.primals[(outermost_problem.primal_dimension + 1):end])
+        warmstart_primals = solution.primals
         inner_solution = solution
     end
 
-    inner_solution
+    # TODO: would be nice if the user can still associate the slacks with the corresponding constraints
+    (; inner_solution..., slacks = fixed_slacks)
 end
