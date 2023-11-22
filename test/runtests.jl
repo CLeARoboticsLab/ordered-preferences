@@ -1,9 +1,7 @@
 using OrderedPreferences
 using Test: @testset, @test
 
-module SimpleLinearExample
-include("../experiments/simple_linear.jl")
-end
+include("../experiments/SimpleLinearExample.jl")
 
 @testset "All tests" begin
     @testset "OptimizationTests" begin
