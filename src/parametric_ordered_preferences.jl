@@ -1,7 +1,11 @@
+struct ParametricOrderedPreferencesProblem{T1<:Vector{<:ParametricOptimizationProblem}}
+    subproblems::T1
+end
+
 """
 Synthesizes a parametric ordered preferences problem from user functions
 """
-function build_ordered_preferences_problem(;
+function ParametricOrderedPreferencesProblem(;
     objective,
     equality_constraints,
     inequality_constraints,
@@ -23,7 +27,7 @@ function build_ordered_preferences_problem(;
     total_inner_slack_dimension = 0
     inner_inequality_constraints = Any[inequality_constraints]
 
-    ordered_preferences_problem = ParametricOptimizationProblem[]
+    subproblems = (ParametricOptimizationProblem[])
 
     function set_up_level(priority_level)
         parameter_dimension_ii = parameter_dimension + total_inner_slack_dimension
@@ -86,7 +90,7 @@ function build_ordered_preferences_problem(;
         if !isnothing(priority_level)
             push!(inner_inequality_constraints, prioritized_inequality_constraints[priority_level])
         end
-        push!(ordered_preferences_problem, optimization_problem)
+        push!(subproblems, optimization_problem)
     end
 
     for priority_level in ordered_priority_levels
@@ -94,5 +98,32 @@ function build_ordered_preferences_problem(;
     end
     set_up_level(nothing)
 
-    ordered_preferences_problem
+    ParametricOrderedPreferencesProblem(subproblems)
+end
+
+# TODO: for now `ordered_preferences_problem` is a vector of ParametricOptimizationProblem,
+# could introduce a struct for that
+# TODO: allow for user-defined warm-starting
+function solve(ordered_preferences_problem::ParametricOrderedPreferencesProblem, θ)
+    outer_problem = last(ordered_preferences_problem.subproblems)
+
+    # Initial guess:
+    fixed_slacks = Float64[]
+
+    # TODO: optimize this
+    inner_solution = nothing
+    for optimization_problem in ordered_preferences_problem.subproblems
+        initial_guess = zeros(total_dim(optimization_problem))
+        if !isnothing(inner_solution)
+            initial_guess[1:(optimization_problem.primal_dimension)] =
+                inner_solution.primals[1:(optimization_problem.primal_dimension)]
+        end
+
+        parameter_value = vcat(θ, fixed_slacks)
+        solution = solve(optimization_problem, parameter_value; initial_guess)
+        append!(fixed_slacks, solution.primals[(outer_problem.primal_dimension + 1):end])
+        inner_solution = solution
+    end
+
+    inner_solution
 end
