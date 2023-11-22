@@ -11,7 +11,7 @@ s.t.        g₁(x₁, x₂) = x₁ ≥ 6,
             g₃(x₁, x₂) = x₁ + x₂ ≤ 11
 Assume g₃ more important than g₂, i.e. innermost problem minimizes slack for g₃.
 """
-function simple_linear()
+function get_problem()
 
     # Define Original (infeasible) Problem
     objective(x, θ) = sum(x)
