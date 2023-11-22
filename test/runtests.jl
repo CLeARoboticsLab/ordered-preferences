@@ -31,7 +31,7 @@ end
 
     @testset "Simple linear ordered preferences problem" begin
         ordered_preferences_problem = SimpleLinearExample.simple_linear()
-        solution = solve_ordered_preferences(ordered_preferences_problem, [0.0])
+        solution = solve(ordered_preferences_problem, [0.0])
         @test isapprox(solution.primals, [6, 5])
     end
 end

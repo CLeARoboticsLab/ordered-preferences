@@ -24,7 +24,7 @@ function simple_linear()
         end,
     ])
 
-    build_ordered_preferences_problem(;
+    ParametricOrderedPreferencesProblem(;
         objective,
         equality_constraints,
         inequality_constraints,
