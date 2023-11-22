@@ -54,11 +54,9 @@ function ParametricOptimizationProblem(;
     total_dimension = primal_dimension + equality_dimension + inequality_dimension
 
     # Define symbolic variables for this MCP.
-    Symbolics.@variables z̃[1:total_dimension]
-    z = BlockArray(
-        Symbolics.scalarize(z̃),
-        [primal_dimension, equality_dimension, inequality_dimension],
-    )
+    z̃ = Symbolics.scalarize(only(Symbolics.@variables(z̃[1:total_dimension])))
+    z = BlockArray(z̃, [primal_dimension, equality_dimension, inequality_dimension])
+
     x = z[Block(1)]
     λ = z[Block(2)]
     μ = z[Block(3)]
@@ -66,18 +64,28 @@ function ParametricOptimizationProblem(;
     # Define a symbolic variable for the parameters.
     Symbolics.@variables θ̃[1:(parameter_dimension)]
     θ = Symbolics.scalarize(θ̃)
+    if isempty(θ)
+        θ = Symbolics.Num[]
+    end
 
     # Build symbolic expressions for objective and constraints.
     f = objective(x, θ)
     g = equality_constraint(x, θ)
+    if isempty(g)
+        g = Symbolics.Num[]
+    end
+
     h = inequality_constraint(x, θ)
+    if isempty(h)
+        h = Symbolics.Num[]
+    end
 
     # Build Lagrangian.
     L = f - λ' * g - μ' * h
 
     # Build F = [∇ₓL, g, h]'.
     ∇ₓL = Symbolics.gradient(L, x)
-    F = Symbolics.build_function([∇ₓL; g; h], z̃, θ̃; expression = Val{false})[1]
+    F = [∇ₓL; g; h]
 
     # Set lower and upper bounds for z.
     z̲ = [
@@ -92,7 +100,7 @@ function ParametricOptimizationProblem(;
     ]
 
     # Build parametric MCP.
-    parametric_mcp = ParametricMCP(F, z̲, z̅, parameter_dimension)
+    parametric_mcp = ParametricMCP(F, z̃, θ, z̲, z̅)
 
     ParametricOptimizationProblem(
         objective,

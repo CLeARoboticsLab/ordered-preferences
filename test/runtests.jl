@@ -21,7 +21,7 @@ end
             inequality_dimension = 2,
         )
 
-        (; primals, variables, status, info) = solve(problem, [0])
+        (; primals, variables, status, info) = solve(problem)
         println("primals: ", primals)
         println("variables: ", variables)
         println("status: ", status)
@@ -31,7 +31,7 @@ end
 
     @testset "Simple linear ordered preferences problem" begin
         ordered_preferences_problem = SimpleLinearExample.simple_linear()
-        solution = solve(ordered_preferences_problem, [0.0])
+        solution = solve(ordered_preferences_problem)
         @test isapprox(solution.primals, [6, 5])
     end
 end

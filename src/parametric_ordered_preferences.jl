@@ -102,7 +102,7 @@ function ParametricOrderedPreferencesProblem(;
 end
 
 # TODO: allow for user-defined warm-starting
-function solve(ordered_preferences_problem::ParametricOrderedPreferencesProblem, θ)
+function solve(ordered_preferences_problem::ParametricOrderedPreferencesProblem, θ = Float64[])
     outer_problem = last(ordered_preferences_problem.subproblems)
 
     # Initial guess:
