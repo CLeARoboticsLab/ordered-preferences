@@ -1,17 +1,13 @@
 module SimpleMPC
 
-using TrajectoryGamesExamples: UnicycleDynamics, planar_double_integrator
+using TrajectoryGamesExamples: UnicycleDynamics
 using TrajectoryGamesBase:
     OpenLoopStrategy, unflatten_trajectory, state_dim, control_dim, control_bounds
 using GLMakie: GLMakie, Observable
 
 using OrderedPreferences
 
-function get_setup(;
-    dynamics = planar_double_integrator(),
-    planning_horizon = 20,
-    obstacle_radius = 0.25,
-)
+function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obstacle_radius = 0.25)
     state_dimension = state_dim(dynamics)
     control_dimension = control_dim(dynamics)
     primal_dimension = (state_dimension + control_dimension) * planning_horizon
