@@ -28,7 +28,7 @@ include("../experiments/SimpleLinearExample.jl")
     end
 
     @testset "Simple linear ordered preferences problem" begin
-        ordered_preferences_problem = SimpleLinearExample.simple_linear()
+        ordered_preferences_problem = SimpleLinearExample.get_problem()
         solution = solve(ordered_preferences_problem)
         @test isapprox(solution.primals, [6, 5])
     end

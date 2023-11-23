@@ -14,23 +14,21 @@ function ParametricOrderedPreferencesProblem(;
     parameter_dimension,
 )
     # Problem data
-    ordered_priority_levels = sort(collect(keys(prioritized_inequality_constraints)); rev = true)
-    outer_level = ordered_priority_levels[end]
+    ordered_priority_levels = eachindex(prioritized_inequality_constraints)
 
     dummy_primals = zeros(primal_dimension)
     dummy_parameters = zeros(parameter_dimension)
 
     equality_dimension = length(equality_constraints(dummy_primals, dummy_parameters))
-    inequality_dimension =
-        length(prioritized_inequality_constraints[outer_level](dummy_primals, dummy_parameters))
+    inequality_dimension = length(inequality_constraints(dummy_primals, dummy_parameters))
 
-    total_inner_slack_dimension = 0
+    fixed_slack_dimension = 0
     inner_inequality_constraints = Any[inequality_constraints]
 
     subproblems = (ParametricOptimizationProblem[])
 
     function set_up_level(priority_level)
-        parameter_dimension_ii = parameter_dimension + total_inner_slack_dimension
+        parameter_dimension_ii = parameter_dimension + fixed_slack_dimension
 
         if isnothing(priority_level)
             # the final level does not have any additional slacks
@@ -51,23 +49,34 @@ function ParametricOrderedPreferencesProblem(;
             end
         end
 
+        equality_constraints_ii = function (x, θ)
+            # only forward the original primals and parameters
+            x_original = x[1:primal_dimension]
+            θ_original = θ[1:parameter_dimension]
+            equality_constraints(x_original, θ_original)
+        end
+
         inequality_constraints_ii = function (x, θ)
+            original_x = x[1:primal_dimension]
             original_θ = θ[1:parameter_dimension]
             fixed_slacks = θ[(parameter_dimension + 1):end]
-            @assert length(fixed_slacks) == total_inner_slack_dimension
+            @assert length(fixed_slacks) == fixed_slack_dimension
             slacks_ii = x[(primal_dimension + 1):end]
             @assert length(slacks_ii) == slack_dimension_ii
 
             unslacked_constraints =
                 mapreduce(vcat, inner_inequality_constraints) do constraint
-                    constraint(x, original_θ)
+                    constraint(original_x, original_θ)
                 end + vcat(zeros(inequality_dimension), fixed_slacks)
 
             if isnothing(priority_level)
                 return unslacked_constraints
             end
 
-            vcat(unslacked_constraints, prioritized_constraints_ii(x, original_θ) .+ slacks_ii)
+            vcat(
+                unslacked_constraints,
+                prioritized_constraints_ii(original_x, original_θ) .+ slacks_ii,
+            )
         end
 
         inequality_dimension_ii = let
@@ -78,7 +87,7 @@ function ParametricOrderedPreferencesProblem(;
 
         optimization_problem = ParametricOptimizationProblem(;
             objective = objective_ii,
-            equality_constraint = equality_constraints,
+            equality_constraint = equality_constraints_ii,
             inequality_constraint = inequality_constraints_ii,
             parameter_dimension = parameter_dimension_ii,
             primal_dimension = primal_dimension_ii,
@@ -86,7 +95,7 @@ function ParametricOrderedPreferencesProblem(;
             inequality_dimension = inequality_dimension_ii,
         )
 
-        total_inner_slack_dimension += slack_dimension_ii
+        fixed_slack_dimension += slack_dimension_ii
         if !isnothing(priority_level)
             push!(inner_inequality_constraints, prioritized_inequality_constraints[priority_level])
         end
@@ -102,26 +111,54 @@ function ParametricOrderedPreferencesProblem(;
 end
 
 # TODO: allow for user-defined warm-starting
-function solve(ordered_preferences_problem::ParametricOrderedPreferencesProblem, θ = Float64[])
-    outer_problem = last(ordered_preferences_problem.subproblems)
+function solve(
+    ordered_preferences_problem::ParametricOrderedPreferencesProblem,
+    θ = Float64[];
+    warmstart_solution = nothing,
+    extra_slack = 1e-4, # TODO: could also express this as inner tightening
+)
+    outermost_problem = last(ordered_preferences_problem.subproblems)
 
-    # Initial guess:
     fixed_slacks = Float64[]
 
     # TODO: optimize allocation and type stability
-    inner_solution = nothing
+    if isnothing(warmstart_solution)
+        warmstart_primals = nothing
+        warmstart_slacks = nothing
+    else
+        warmstart_primals = warmstart_solution.primals
+        warmstart_slacks = warmstart_solution.slacks
+    end
+    local inner_solution
     for optimization_problem in ordered_preferences_problem.subproblems
         initial_guess = zeros(total_dim(optimization_problem))
-        if !isnothing(inner_solution)
-            initial_guess[1:(optimization_problem.primal_dimension)] =
-                inner_solution.primals[1:(optimization_problem.primal_dimension)]
+        if !isnothing(warmstart_primals)
+            # concatenate the outer primals (appearing in all subproblems) with the slacks for this
+            # level
+            slack_dimension_ii =
+                optimization_problem.primal_dimension - outermost_problem.primal_dimension
+            if !isnothing(warmstart_slacks)
+                fixed_slack_dimension = length(fixed_slacks)
+                slacks_ii_warmstart =
+                    warmstart_slacks[(fixed_slack_dimension + 1):(fixed_slack_dimension + slack_dimension_ii)]
+            else
+                slacks_ii_warmstart = zeros(slack_dimension_ii)
+            end
+            initial_guess[1:(optimization_problem.primal_dimension)] .= begin
+                vcat(warmstart_primals[1:(outermost_problem.primal_dimension)], slacks_ii_warmstart)
+            end
         end
 
         parameter_value = vcat(θ, fixed_slacks)
         solution = solve(optimization_problem, parameter_value; initial_guess)
-        append!(fixed_slacks, solution.primals[(outer_problem.primal_dimension + 1):end])
+        append!(
+            fixed_slacks,
+            solution.primals[(outermost_problem.primal_dimension + 1):end] .+ extra_slack,
+        )
+        warmstart_primals = solution.primals
         inner_solution = solution
     end
 
-    inner_solution
+    # TODO: would be nice if the user can still associate the slacks with the corresponding constraints
+    (; inner_solution..., slacks = fixed_slacks)
 end

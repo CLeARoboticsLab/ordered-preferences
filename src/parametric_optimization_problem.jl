@@ -85,7 +85,7 @@ function ParametricOptimizationProblem(;
 
     # Build F = [∇ₓL, g, h]'.
     ∇ₓL = Symbolics.gradient(L, x)
-    F = [∇ₓL; g; h]
+    F = Vector{Symbolics.Num}([∇ₓL; g; h])
 
     # Set lower and upper bounds for z.
     z̲ = [
