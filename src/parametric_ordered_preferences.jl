@@ -14,7 +14,7 @@ function ParametricOrderedPreferencesProblem(;
     parameter_dimension,
 )
     # Problem data
-    ordered_priority_levels = sort(collect(keys(prioritized_inequality_constraints)); rev = true)
+    ordered_priority_levels = eachindex(prioritized_inequality_constraints)
 
     dummy_primals = zeros(primal_dimension)
     dummy_parameters = zeros(parameter_dimension)
@@ -115,6 +115,7 @@ function solve(
     ordered_preferences_problem::ParametricOrderedPreferencesProblem,
     θ = Float64[];
     warmstart_solution = nothing,
+    extra_slack = 1e-4, # TODO: could also express this as inner tightening
 )
     outermost_problem = last(ordered_preferences_problem.subproblems)
 
@@ -150,7 +151,10 @@ function solve(
 
         parameter_value = vcat(θ, fixed_slacks)
         solution = solve(optimization_problem, parameter_value; initial_guess)
-        append!(fixed_slacks, solution.primals[(outermost_problem.primal_dimension + 1):end])
+        append!(
+            fixed_slacks,
+            solution.primals[(outermost_problem.primal_dimension + 1):end] .+ extra_slack,
+        )
         warmstart_primals = solution.primals
         inner_solution = solution
     end

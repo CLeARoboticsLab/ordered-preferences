@@ -1,6 +1,5 @@
 module SimpleMPC
 
-using Dictionaries: dictionary
 using TrajectoryGamesExamples: UnicycleDynamics, planar_double_integrator
 using TrajectoryGamesBase:
     OpenLoopStrategy, unflatten_trajectory, state_dim, control_dim, control_bounds
@@ -8,7 +7,11 @@ using GLMakie: GLMakie, Observable
 
 using OrderedPreferences
 
-function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 30, obstacle_radius = 0.25)
+function get_setup(;
+    dynamics = planar_double_integrator(),
+    planning_horizon = 20,
+    obstacle_radius = 0.25,
+)
     state_dimension = state_dim(dynamics)
     control_dimension = control_dim(dynamics)
     primal_dimension = (state_dimension + control_dimension) * planning_horizon
@@ -30,9 +33,7 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 30, obsta
         (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
         (; goal_position) = unflatten_parameters(θ)
 
-        control_cost = sum(sum(u .^ 2) for u in us)
-        state_cost = sum((xs[end][1:2] - goal_position) .^ 2)
-        0.1 * control_cost + state_cost
+        sum(sum(u .^ 2) for u in us)
     end
 
     equality_constraints = function (z, θ)
@@ -46,7 +47,6 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 30, obsta
     end
 
     function inequality_constraints(z, θ)
-        # TODO enforce control bounds
         (; lb, ub) = control_bounds(dynamics)
         lb_mask = findall(!isinf, lb)
         ub_mask = findall(!isinf, ub)
@@ -56,15 +56,40 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 30, obsta
         end
     end
 
-    prioritized_inequality_constraints = dictionary([
-        1 => function (z, θ)
+    prioritized_inequality_constraints = [
+        # most important: obstacle avoidance
+        function (z, θ)
             (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
             (; obstacle_position) = unflatten_parameters(θ)
             mapreduce(vcat, 2:length(xs)) do k
                 sum((xs[k][1:2] - obstacle_position) .^ 2) - obstacle_radius^2
             end
         end,
-    ])
+
+        # limit acceleration and don't go too fast, stay within the playing field
+        function (z, θ)
+            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+            mapreduce(vcat, 1:length(xs)) do k
+                px, py, v, θ = xs[k]
+                a, ω = us[k]
+
+                lateral_acceleration = v * ω
+                longitudinal_acceleration = a
+                acceleration_constarint =
+                    0.5 - (lateral_acceleration^2 + longitudinal_acceleration^2)
+                velocity_constraint = vcat(v + 1.0, -v + 1.0)
+                position_constraints = vcat(px + 5.0, -px + 5.0, py + 5.0, -py + 5.0)
+                vcat(acceleration_constarint, velocity_constraint, position_constraints)
+            end
+        end,
+
+        # reach the goal
+        function (z, θ)
+            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+            (; goal_position) = unflatten_parameters(θ)
+            -sum((xs[end][1:2] - goal_position) .^ 2) + 0.0001
+        end,
+    ]
 
     problem = ParametricOrderedPreferencesProblem(;
         objective,
@@ -78,8 +103,8 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 30, obsta
     (; problem, flatten_parameters, unflatten_parameters)
 end
 
-function demo()
-    dynamics = planar_double_integrator(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0]))
+function demo(; paused = false)
+    dynamics = UnicycleDynamics(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0]))
     obstacle_radius = 0.25
     (; problem, flatten_parameters) = get_setup(; dynamics, obstacle_radius)
 
@@ -89,8 +114,7 @@ function demo()
         solution = solve(problem, θ; warmstart_solution)
         trajectory =
             unflatten_trajectory(solution.primals, state_dim(dynamics), control_dim(dynamics))
-        strategy = OpenLoopStrategy(trajectory.xs, trajectory.us)
-        (; strategy, solution)
+        (; strategy = OpenLoopStrategy(trajectory.xs, trajectory.us), solution)
     end
 
     initial_state = Observable(zeros(state_dim(dynamics)))
@@ -104,9 +128,9 @@ function demo()
     )
 
     strategy = GLMakie.@lift let
-        (; strategy, solution) = get_receding_horizon_solution($θ; warmstart_solution)
-        warmstart_solution = solution
-        strategy
+        result = get_receding_horizon_solution($θ; warmstart_solution)
+        warmstart_solution = result.solution
+        result.strategy
     end
 
     figure = GLMakie.Figure()
@@ -146,6 +170,20 @@ function demo()
         GLMakie.Consume(false)
     end
 
+    # pause and stop buttons
+    figure[2, 1] = buttongrid = GLMakie.GridLayout(tellwidth = false)
+    is_paused = GLMakie.Observable(paused)
+    buttongrid[1, 1] = pause_button = GLMakie.Button(figure, label = "Pause")
+    GLMakie.on(pause_button.clicks) do _
+        is_paused[] = !is_paused[]
+    end
+
+    is_stopped = GLMakie.Observable(false)
+    buttongrid[1, 2] = stop_button = GLMakie.Button(figure, label = "Stop")
+    GLMakie.on(stop_button.clicks) do _
+        is_stopped[] = !is_stopped[]
+    end
+
     # visualize initial state
     GLMakie.scatter!(axis, GLMakie.@lift(GLMakie.Point2f($initial_state[1:2])), markersize = 20)
 
@@ -167,6 +205,15 @@ function demo()
     )
 
     GLMakie.plot!(axis, strategy)
+
+    display(figure)
+
+    while !is_stopped[]
+        compute_time = @elapsed if !is_paused[]
+            initial_state[] = strategy[].xs[begin + 1]
+        end
+        sleep(max(0.0, 0.1 - compute_time))
+    end
 
     figure
 end
