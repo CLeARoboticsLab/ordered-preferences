@@ -2,15 +2,15 @@ module SimpleMPC
 
 using TrajectoryGamesExamples: UnicycleDynamics
 using TrajectoryGamesBase:
-    OpenLoopStrategy, unflatten_trajectory, state_dim, control_dim, control_bounds
+    TrajectoryGamesBase as TGB, OpenLoopStrategy, state_dim, control_dim, control_bounds
 using GLMakie: GLMakie, Observable
 
 using OrderedPreferences
 
-function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obstacle_radius = 0.25)
+function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 10, obstacle_radius = 0.25)
     state_dimension = state_dim(dynamics)
     control_dimension = control_dim(dynamics)
-    primal_dimension = (state_dimension + control_dimension) * planning_horizon
+    primal_dimension = control_dimension * planning_horizon
     parameter_dimension = state_dimension + 4
 
     unflatten_parameters = function (θ)
@@ -25,67 +25,85 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
         vcat(initial_state, goal_position, obstacle_position)
     end
 
-    objective = function (z, θ)
-        (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-        (; goal_position) = unflatten_parameters(θ)
+    function unflatten_dense_trajectory(z, θ)
+        us = z |> TGB.to_vector_of_vectors(control_dimension)
 
-        sum(sum(u .^ 2) for u in us)
+        (; initial_state) = unflatten_parameters(θ)
+
+        xs = Any[initial_state]
+
+        for k in 1:length(us)
+            xp = dynamics(xs[k], us[k], k)
+            push!(xs, xp)
+        end
+
+        (; xs, us)
+    end
+
+    objective = function (z, θ)
+        (; xs, us) = unflatten_dense_trajectory(z, θ)
+        (; goal_position) = unflatten_parameters(θ)
+        control_cost = sum(sum(u .^ 2) for u in us)
+        state_cost = sum(sum((x[1:2] - goal_position) .^ 2) for x in xs)
+        control_cost + 10 * state_cost
     end
 
     equality_constraints = function (z, θ)
-        (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-        (; initial_state) = unflatten_parameters(θ)
-        initial_state_constraint = xs[1] - initial_state
-        dynamics_constraints = mapreduce(vcat, 2:length(xs)) do k
-            xs[k] - dynamics(xs[k - 1], us[k - 1], k)
-        end
-        vcat(initial_state_constraint, dynamics_constraints)
+        #(; xs, us) = unflatten_dense_trajectory(z, θ)
+        #(; initial_state) = unflatten_parameters(θ)
+        #initial_state_constraint = xs[1] - initial_state
+        #dynamics_constraints = mapreduce(vcat, 2:length(xs)) do k
+        #    xs[k] - dynamics(xs[k - 1], us[k - 1], k)
+        #end
+        #vcat(initial_state_constraint, dynamics_constraints)
+        []
     end
 
     function inequality_constraints(z, θ)
         (; lb, ub) = control_bounds(dynamics)
         lb_mask = findall(!isinf, lb)
         ub_mask = findall(!isinf, ub)
-        (; us) = unflatten_trajectory(z, state_dimension, control_dimension)
+        (; us) = unflatten_dense_trajectory(z, θ)
         mapreduce(vcat, us) do u
             vcat(u[lb_mask] - lb[lb_mask], ub[ub_mask] - u[ub_mask])
         end
     end
 
-    prioritized_inequality_constraints = [
-        # most important: obstacle avoidance
-        function (z, θ)
-            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-            (; obstacle_position) = unflatten_parameters(θ)
-            mapreduce(vcat, 2:length(xs)) do k
-                sum((xs[k][1:2] - obstacle_position) .^ 2) - obstacle_radius^2
-            end
-        end,
+    #prioritized_inequality_constraints = [
+    #    # most important: obstacle avoidance
+    #    function (z, θ)
+    #        (; xs, us) = unflatten_dense_trajectory(z, θ)
+    #        (; obstacle_position) = unflatten_parameters(θ)
+    #        mapreduce(vcat, 2:length(xs)) do k
+    #            sum((xs[k][1:2] - obstacle_position) .^ 2) - obstacle_radius^2
+    #        end
+    #    end,
 
-        # limit acceleration and don't go too fast, stay within the playing field
-        function (z, θ)
-            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-            mapreduce(vcat, 1:length(xs)) do k
-                px, py, v, θ = xs[k]
-                a, ω = us[k]
+    #    # limit acceleration and don't go too fast, stay within the playing field
+    #    function (z, θ)
+    #        (; xs, us) = unflatten_dense_trajectory(z, θ)
+    #        mapreduce(vcat, 1:length(us)) do k
+    #            px, py, v, θ = xs[k]
+    #            a, ω = us[k]
 
-                lateral_acceleration = v * ω
-                longitudinal_acceleration = a
-                acceleration_constarint =
-                    0.5 - (lateral_acceleration^2 + longitudinal_acceleration^2)
-                velocity_constraint = vcat(v + 1.0, -v + 1.0)
-                position_constraints = vcat(px + 5.0, -px + 5.0, py + 5.0, -py + 5.0)
-                vcat(acceleration_constarint, velocity_constraint, position_constraints)
-            end
-        end,
+    #            lateral_acceleration = v * ω
+    #            longitudinal_acceleration = a
+    #            acceleration_constarint =
+    #                0.5 - (lateral_acceleration^2 + longitudinal_acceleration^2)
+    #            velocity_constraint = vcat(v + 1.0, -v + 1.0)
+    #            position_constraints = vcat(px + 5.0, -px + 5.0, py + 5.0, -py + 5.0)
+    #            vcat(acceleration_constarint, velocity_constraint, position_constraints)
+    #        end
+    #    end,
 
-        # reach the goal
-        function (z, θ)
-            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-            (; goal_position) = unflatten_parameters(θ)
-            -sum((xs[end][1:2] - goal_position) .^ 2) + 0.0001
-        end,
-    ]
+    #    # reach the goal
+    #    function (z, θ)
+    #        (; xs, us) = unflatten_dense_trajectory(z, θ)
+    #        (; goal_position) = unflatten_parameters(θ)
+    #        -sum((xs[end][1:2] - goal_position) .^ 2) + 0.0001
+    #    end,
+    #]
+    prioritized_inequality_constraints = []
 
     problem = ParametricOrderedPreferencesProblem(;
         objective,
@@ -96,20 +114,20 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
         parameter_dimension,
     )
 
-    (; problem, flatten_parameters, unflatten_parameters)
+    (; problem, flatten_parameters, unflatten_parameters, unflatten_dense_trajectory)
 end
 
 function demo(; paused = false)
     dynamics = UnicycleDynamics(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0]))
     obstacle_radius = 0.25
-    (; problem, flatten_parameters) = get_setup(; dynamics, obstacle_radius)
+    (; problem, flatten_parameters, unflatten_dense_trajectory) =
+        get_setup(; dynamics, obstacle_radius)
 
     warmstart_solution = nothing
 
     function get_receding_horizon_solution(θ; warmstart_solution)
         solution = solve(problem, θ; warmstart_solution)
-        trajectory =
-            unflatten_trajectory(solution.primals, state_dim(dynamics), control_dim(dynamics))
+        trajectory = unflatten_dense_trajectory(solution.primals, θ)
         (; strategy = OpenLoopStrategy(trajectory.xs, trajectory.us), solution)
     end
 
