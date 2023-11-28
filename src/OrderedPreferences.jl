@@ -12,5 +12,4 @@ export ParametricOptimizationProblem, solve, total_dim
 include("parametric_ordered_preferences.jl")
 export ParametricOrderedPreferencesProblem, solve
 
-
 end # module OrderedPreferences

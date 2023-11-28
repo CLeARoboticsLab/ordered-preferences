@@ -47,6 +47,7 @@ function ParametricOptimizationProblem(;
     primal_dimension,
     equality_dimension,
     inequality_dimension,
+    compute_sensitivities = false,
 )
     @assert !isnothing(equality_constraint)
     @assert !isnothing(inequality_constraint)
@@ -100,7 +101,7 @@ function ParametricOptimizationProblem(;
     ]
 
     # Build parametric MCP.
-    parametric_mcp = ParametricMCP(F, z̃, θ, z̲, z̅)
+    parametric_mcp = ParametricMCP(F, z̃, θ, z̲, z̅; compute_sensitivities)
 
     ParametricOptimizationProblem(
         objective,
