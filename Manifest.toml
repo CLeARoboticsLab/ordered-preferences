@@ -1337,7 +1337,7 @@ version = "0.12.3"
 
 [[deps.ParametricMCPs]]
 deps = ["ChainRulesCore", "ForwardDiff", "LinearAlgebra", "PATHSolver", "SparseArrays", "Symbolics"]
-path = "/home/lassepe/worktree/ParametricMCPs.jl/"
+git-tree-sha1 = "d5f1b79e0c2d1dbfe3e00f51a96a9c2aa694f85b"
 uuid = "9b992ff8-05bb-4ea1-b9d2-5ef72d82f7ad"
 version = "0.1.8"
 
