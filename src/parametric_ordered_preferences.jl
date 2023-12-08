@@ -149,7 +149,7 @@ function solve(
                     slacks_ii_warmstart = zeros(slack_dimension_ii)
                 end
 
-                if warmstart_solution === :final
+                if warmstart_strategy === :final
                     warmstart_primals = warmstart_solution.level_solutions[end].primals
                 end
 
