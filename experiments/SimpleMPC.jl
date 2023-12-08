@@ -83,7 +83,11 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
         function (z, θ)
             (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
             (; goal_position) = unflatten_parameters(θ)
-            -sum((xs[end][1:2] - goal_position) .^ 2) + 0.0001
+            goal_deviation = xs[end][1:2] .- goal_position
+            [
+                goal_deviation .+ 0.01
+                -goal_deviation .+ 0.01
+            ]
         end,
     ]
 
