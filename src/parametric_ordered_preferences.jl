@@ -116,6 +116,7 @@ function solve(
     θ = Float64[];
     warmstart_solution = nothing,
     extra_slack = 1e-4, # TODO: could also express this as inner tightening
+    warmstart_strategy = :final,
 )
     outermost_problem = last(ordered_preferences_problem.subproblems)
 
@@ -129,23 +130,37 @@ function solve(
         warmstart_primals = warmstart_solution.primals
         warmstart_slacks = warmstart_solution.slacks
     end
-    local inner_solution
-    for optimization_problem in ordered_preferences_problem.subproblems
+
+    level_solutions = []
+
+    for (level, optimization_problem) in enumerate(ordered_preferences_problem.subproblems)
         initial_guess = zeros(total_dim(optimization_problem))
-        if !isnothing(warmstart_primals)
-            # concatenate the outer primals (appearing in all subproblems) with the slacks for this
-            # level
-            slack_dimension_ii =
-                optimization_problem.primal_dimension - outermost_problem.primal_dimension
-            if !isnothing(warmstart_slacks)
-                fixed_slack_dimension = length(fixed_slacks)
-                slacks_ii_warmstart =
-                    warmstart_slacks[(fixed_slack_dimension + 1):(fixed_slack_dimension + slack_dimension_ii)]
+        if !isnothing(warmstart_solution)
+            if warmstart_strategy === :cascade || warmstart_strategy === :final
+                # concatenate the outer primals (appearing in all subproblems) with the slacks for this
+                # level
+                slack_dimension_ii =
+                    optimization_problem.primal_dimension - outermost_problem.primal_dimension
+                if !isnothing(warmstart_slacks)
+                    fixed_slack_dimension = length(fixed_slacks)
+                    slacks_ii_warmstart =
+                        warmstart_slacks[(fixed_slack_dimension + 1):(fixed_slack_dimension + slack_dimension_ii)]
+                else
+                    slacks_ii_warmstart = zeros(slack_dimension_ii)
+                end
+
+                if warmstart_strategy === :final
+                    warmstart_primals = warmstart_solution.level_solutions[end].primals
+                end
+
+                initial_guess[1:(optimization_problem.primal_dimension)] .= begin
+                    vcat(warmstart_primals[1:(outermost_problem.primal_dimension)], slacks_ii_warmstart)
+                end
+            elseif warmstart_strategy === :parallel
+                _wp = warmstart_solution.level_solutions[level].primals
+                initial_guess[1:length(_wp)] .= _wp
             else
-                slacks_ii_warmstart = zeros(slack_dimension_ii)
-            end
-            initial_guess[1:(optimization_problem.primal_dimension)] .= begin
-                vcat(warmstart_primals[1:(outermost_problem.primal_dimension)], slacks_ii_warmstart)
+                error("invalid warmstart strategy")
             end
         end
 
@@ -156,9 +171,9 @@ function solve(
             solution.primals[(outermost_problem.primal_dimension + 1):end] .+ extra_slack,
         )
         warmstart_primals = solution.primals
-        inner_solution = solution
+        push!(level_solutions, solution)
     end
 
     # TODO: would be nice if the user can still associate the slacks with the corresponding constraints
-    (; inner_solution..., slacks = fixed_slacks)
+    (; level_solutions[end]..., slacks = fixed_slacks, level_solutions)
 end
