@@ -15,7 +15,7 @@ function ParametricOrderedPreferencesProblem(;
 )
     # Problem data
     ordered_priority_levels = eachindex(prioritized_inequality_constraints)
-
+    
     dummy_primals = zeros(primal_dimension)
     dummy_parameters = zeros(parameter_dimension)
 

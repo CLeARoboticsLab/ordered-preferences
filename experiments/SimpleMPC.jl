@@ -1,5 +1,5 @@
 module SimpleMPC
-
+export demo
 using TrajectoryGamesExamples: UnicycleDynamics
 using TrajectoryGamesBase:
     OpenLoopStrategy, unflatten_trajectory, state_dim, control_dim, control_bounds
@@ -7,7 +7,7 @@ using GLMakie: GLMakie, Observable
 
 using OrderedPreferences
 
-function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obstacle_radius = 0.25)
+function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obstacle_radius = 0.25, collision_dist = 0.02, others = nothing)
     state_dimension = state_dim(dynamics)
     control_dimension = control_dim(dynamics)
     primal_dimension = (state_dimension + control_dimension) * planning_horizon
@@ -20,18 +20,17 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
         obstacle_position = first(θ_iter, 2)
         (; initial_state, goal_position, obstacle_position)
     end
-
+    
     function flatten_parameters(; initial_state, goal_position, obstacle_position)
         vcat(initial_state, goal_position, obstacle_position)
     end
-
+    
     objective = function (z, θ)
         (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
         (; goal_position) = unflatten_parameters(θ)
-
         sum(sum(u .^ 2) for u in us)
     end
-
+    
     equality_constraints = function (z, θ)
         (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
         (; initial_state) = unflatten_parameters(θ)
@@ -41,7 +40,7 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
         end
         vcat(initial_state_constraint, dynamics_constraints)
     end
-
+    
     function inequality_constraints(z, θ)
         (; lb, ub) = control_bounds(dynamics)
         lb_mask = findall(!isinf, lb)
@@ -50,8 +49,9 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
         mapreduce(vcat, us) do u
             vcat(u[lb_mask] - lb[lb_mask], ub[ub_mask] - u[ub_mask])
         end
+        
     end
-
+    
     prioritized_inequality_constraints = [
         # most important: obstacle avoidance
         function (z, θ)
@@ -61,7 +61,7 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
                 sum((xs[k][1:2] - obstacle_position) .^ 2) - obstacle_radius^2
             end
         end,
-
+        
         # limit acceleration and don't go too fast, stay within the playing field
         function (z, θ)
             (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
@@ -91,6 +91,17 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
         end,
     ]
 
+    # Add collision avoidance constraint (now most important) if other players exist
+    if !isnothing(others) # TODO: Expand to include more than 2 players
+        #Main.@infiltrate
+        pushfirst!(prioritized_inequality_constraints, function (z, θ)
+            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+            mapreduce(vcat, 2:length(xs)) do k
+                sum((xs[k][1:2] - others[k][1:2]) .^ 2) - collision_dist^2
+            end
+        end)
+    end
+    
     problem = ParametricOrderedPreferencesProblem(;
         objective,
         equality_constraints,
@@ -99,39 +110,108 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
         primal_dimension,
         parameter_dimension,
     )
-
+    
     (; problem, flatten_parameters, unflatten_parameters)
 end
 
 function demo(; paused = false)
     dynamics = UnicycleDynamics(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0]))
     obstacle_radius = 0.25
-    (; problem, flatten_parameters) = get_setup(; dynamics, obstacle_radius)
+    collision_dist = 0.02
+
+    # For computing initial trajectory
+    (; problem, flatten_parameters) = get_setup(; dynamics, obstacle_radius, collision_dist)
 
     warmstart_solution = nothing
-
-    function get_receding_horizon_solution(θ; warmstart_solution)
+    
+    function get_receding_horizon_solution(problem, θ; warmstart_solution)
         solution = solve(problem, θ; warmstart_solution)
         trajectory =
             unflatten_trajectory(solution.primals, state_dim(dynamics), control_dim(dynamics))
-        (; strategy = OpenLoopStrategy(trajectory.xs, trajectory.us), solution)
+        (; strategy = OpenLoopStrategy(trajectory.xs, trajectory.us), solution) # return NamedTuple
     end
 
-    initial_state = Observable(zeros(state_dim(dynamics)))
-    goal_position = Observable([0.5, 0.5])
+    function get_random_point_within_ball(center, radius)
+        # Check center is Tuple
+        @assert length(center) == 2 "Center must be a 2-element vector [x, y]"
+        x_coord, y_coord = center
+
+        # Generate random angle in radians
+        angle = 2π * rand()
+
+        # Generate random distance within the specificed radius
+        r = radius * sqrt(rand())
+
+        # Calculate new x and y coordinates
+        x = x_coord + r * cos(angle)
+        y = y_coord + r * sin(angle)
+
+        [x, y]
+    end
+
     obstacle_position = Observable([-0.5, 0.0])
 
-    θ = GLMakie.@lift flatten_parameters(;
-        initial_state = $initial_state,
-        goal_position = $goal_position,
-        obstacle_position = $obstacle_position,
-    )
+    # Player 1
+    initial_state1 = Observable([-0.25, -0.5, 0.0, 0.0])
+    goal_position1 = Observable(get_random_point_within_ball((-0.5, 0.5), 0.1))
+    θ1 = GLMakie.@lift flatten_parameters(; initial_state = $initial_state1, goal_position = $goal_position1, obstacle_position = $obstacle_position)
 
-    strategy = GLMakie.@lift let
-        result = get_receding_horizon_solution($θ; warmstart_solution)
-        warmstart_solution = result.solution
-        result.strategy
+    # Player 2
+    initial_state2 = Observable([0.75, -0.5, 0.0, 0.0])
+    goal_position2 = Observable(get_random_point_within_ball((-0.5, -0.5), 0.1))
+    θ2 = GLMakie.@lift flatten_parameters(; initial_state = $initial_state2, goal_position = $goal_position2, obstacle_position = $obstacle_position)
+
+    println("Player 1's goal_position:", goal_position1)
+    println("Player 2's goal_position:", goal_position2)
+
+#   function get_iterated_best_response()
+    # 1. Initialize trajectory for Player 2 
+    strategy2 = GLMakie.@lift let
+         result = get_receding_horizon_solution(problem, $θ2; warmstart_solution)
+         warmstart_solution = result.solution
+         result.strategy
     end
+
+
+    Main.@infiltrate
+
+    # 2. Solve for each player's best response
+    # Player 1 goes first, then Player 2 responses based on Player 1's trajectory
+    # Include collision avoidance priority constraint
+    (; problem) = get_setup(; dynamics, obstacle_radius, collision_dist, others = strategy2.val.xs)
+    strategy1 = GLMakie.@lift let 
+        result = get_receding_horizon_solution(problem, $θ1; warmstart_solution)
+        result.strategy # P1's best response
+    end
+
+    Main.@infiltrate
+
+    (; problem) = get_setup(; dynamics, obstacle_radius, collision_dist, others = strategy1.val.xs)
+    strategy2 = GLMakie.@lift let 
+        result = get_receding_horizon_solution(problem, $θ2; warmstart_solution)
+        result.strategy # P2's best response
+    end
+
+#    end
+
+    Main.@infiltrate
+
+
+    # initial_state = Observable(zeros(state_dim(dynamics)))
+    # goal_position = Observable([0.5, 0.5])
+    # obstacle_position = Observable([-0.5, 0.0])
+
+    # θ = GLMakie.@lift flatten_parameters(;
+    #     initial_state = $initial_state,
+    #     goal_position = $goal_position,
+    #     obstacle_position = $obstacle_position,
+    # )
+
+    # strategy = GLMakie.@lift let
+    #     result = get_receding_horizon_solution($θ; warmstart_solution)
+    #     warmstart_solution = result.solution
+    #     result.strategy
+    # end
 
     figure = GLMakie.Figure()
     axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-1, 1), (-1, 1)))
@@ -185,7 +265,8 @@ function demo(; paused = false)
     end
 
     # visualize initial state
-    GLMakie.scatter!(axis, GLMakie.@lift(GLMakie.Point2f($initial_state[1:2])), markersize = 20)
+    GLMakie.scatter!(axis, GLMakie.@lift(GLMakie.Point2f($initial_state1[1:2])), markersize = 20, color = :blue)
+    GLMakie.scatter!(axis, GLMakie.@lift(GLMakie.Point2f($initial_state2[1:2])), markersize = 20, color = :red)
 
     # visualize obstacle position
     GLMakie.scatter!(
@@ -199,12 +280,19 @@ function demo(; paused = false)
     # visualize goal position
     GLMakie.scatter!(
         axis,
-        GLMakie.@lift(GLMakie.Point2f($goal_position)),
+        GLMakie.@lift(GLMakie.Point2f($goal_position1)),
         markersize = 20,
         color = :green,
     )
 
-    GLMakie.plot!(axis, strategy)
+    GLMakie.scatter!(
+        axis,
+        GLMakie.@lift(GLMakie.Point2f($goal_position2)),
+        markersize = 20,
+        color = :cyan,
+    )
+
+    GLMakie.plot!(axis, strategy1, strategy2)
 
     display(figure)
 
