@@ -10,30 +10,38 @@ using LinearAlgebra: norm
 
 using OrderedPreferences
 
-function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obstacle_radius = 0.25, collision_dist = 0.02, others = nothing)
+function get_setup(;
+    dynamics = UnicycleDynamics(),
+    planning_horizon = 20,
+    collision_avoidance_distance = 0.25,
+    collision_dist = 0.02,
+)
     state_dimension = state_dim(dynamics)
     control_dimension = control_dim(dynamics)
     primal_dimension = (state_dimension + control_dimension) * planning_horizon
-    parameter_dimension = state_dimension + 4
+    goal_dimension = 2
+    opponent_trajectory_dimension = 2 * planning_horizon # one position element for each time step
+    parameter_dimension = state_dimension + goal_dimension + opponent_trajectory_dimension
 
     unflatten_parameters = function (θ)
         θ_iter = Iterators.Stateful(θ)
         initial_state = first(θ_iter, state_dimension)
-        goal_position = first(θ_iter, 2)
-        obstacle_position = first(θ_iter, 2)
-        (; initial_state, goal_position, obstacle_position)
+        goal_position = first(θ_iter, goal_dimension)
+        opponent_positions =
+            reshape(first(θ_iter, opponent_trajectory_dimension), 2, :) |> eachcol |> collect
+        (; initial_state, goal_position, opponent_positions)
     end
-    
-    function flatten_parameters(; initial_state, goal_position, obstacle_position)
-        vcat(initial_state, goal_position, obstacle_position)
+
+    function flatten_parameters(; initial_state, goal_position, opponent_positions)
+        vcat(initial_state, goal_position, reduce(vcat, opponent_positions))
     end
-    
+
     objective = function (z, θ)
         (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
         (; goal_position) = unflatten_parameters(θ)
         sum(sum(u .^ 2) for u in us)
     end
-    
+
     equality_constraints = function (z, θ)
         (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
         (; initial_state) = unflatten_parameters(θ)
@@ -43,7 +51,7 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
         end
         vcat(initial_state_constraint, dynamics_constraints)
     end
-    
+
     function inequality_constraints(z, θ)
         (; lb, ub) = control_bounds(dynamics)
         lb_mask = findall(!isinf, lb)
@@ -52,32 +60,18 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
         mapreduce(vcat, us) do u
             vcat(u[lb_mask] - lb[lb_mask], ub[ub_mask] - u[ub_mask])
         end
-        
-    end
-    
-    # TODO: Any better way?
-    if isnothing(others)
-        others = [zeros(Float64, state_dimension) for _ in 1:planning_horizon]
     end
 
     prioritized_inequality_constraints = [
-        # most important: avoid collisions with other players
+        # most important: avoid collisions with opponent at every time step
         function (z, θ)
             (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+            (; opponent_positions) = unflatten_parameters(θ)
             mapreduce(vcat, 2:length(xs)) do k
-                sum((xs[k][1:2] - others[k][1:2]) .^ 2) - collision_dist^2
+                sum((xs[k][1:2] - opponent_positions[k]) .^ 2) - collision_avoidance_distance^2
             end
         end,
 
-        # 2nd most important: obstacle avoidance
-        function (z, θ)
-            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-            (; obstacle_position) = unflatten_parameters(θ)
-            mapreduce(vcat, 2:length(xs)) do k
-                sum((xs[k][1:2] - obstacle_position) .^ 2) - obstacle_radius^2
-            end
-        end,
-        
         # limit acceleration and don't go too fast, stay within the playing field
         function (z, θ)
             (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
@@ -107,16 +101,6 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
         end,
     ]
 
-    # Add collision avoidance constraint (now most important) if other players exist
-    # if !isnothing(others) # TODO: Expand to include more than 2 players
-    #     pushfirst!(prioritized_inequality_constraints, function (z, θ)
-    #         (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-    #         mapreduce(vcat, 2:length(xs)) do k
-    #             sum((xs[k][1:2] - others[k][1:2]) .^ 2) - collision_dist^2
-    #         end
-    #     end)
-    #end
-    
     problem = ParametricOrderedPreferencesProblem(;
         objective,
         equality_constraints,
@@ -125,20 +109,44 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
         primal_dimension,
         parameter_dimension,
     )
-    
+
+    #function compute_optimized_trajectory(
+    #    initial_state,
+    #    goal_position,
+    #    opponent_positions;
+    #    warmstart_solution = nothing,
+    #)
+    #    θ = flatten_parameters(;
+    #        initial_state = initial_state,
+    #        goal_position = goal_position,
+    #        opponent_positions = opponent_positions,
+    #    )
+    #    solution = solve(problem, θ; warmstart_solution)
+    #    unflatten_trajectory(solution.primals, state_dimension, control_dimension)
+    #end
+    #
     (; problem, flatten_parameters, unflatten_parameters)
 end
 
 function demo(; paused = false)
     dynamics = UnicycleDynamics(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0]))
-    obstacle_radius = 0.25
+    collision_avoidance_distance = 0.25
     collision_dist = 0.1
 
     # For computing initial trajectory
-    (; problem, flatten_parameters) = get_setup(; dynamics, obstacle_radius, collision_dist)
+    (; problem, flatten_parameters) =
+        get_setup(; dynamics, collision_avoidance_distance, collision_dist)
+
+    # TODO: Now:
+    #
+    # 1. construct the `best_response_map` for each player as a callable:
+    #   `best_response_map(parameters::Vector{Float64}, initial_guess::Vector{Float64})::Vector{Float64}`
+    # 2. call `solve_nash` with the `best_response_map`s and an initial guess for the trajectory
+    #
+    # This whole logic will take the role of `get_receding_horizon_solution`.
 
     warmstart_solution = nothing
-    
+
     function get_receding_horizon_solution(problem, θ; warmstart_solution)
         solution = solve(problem, θ; warmstart_solution)
         trajectory =
@@ -163,18 +171,26 @@ function demo(; paused = false)
 
         [x, y]
     end
-##
+    ##
     obstacle_position = Observable([0.0, 0.0])
 
     # Player 1
     initial_state1 = Observable([-0.8, 0.0, 0.0, 0.0])
     goal_position1 = Observable(get_random_point_within_ball((0.8, 0.0), 0.1))
-    θ1 = GLMakie.@lift flatten_parameters(; initial_state = $initial_state1, goal_position = $goal_position1, obstacle_position = $obstacle_position)
+    θ1 = GLMakie.@lift flatten_parameters(;
+        initial_state = $initial_state1,
+        goal_position = $goal_position1,
+        obstacle_position = $obstacle_position,
+    )
 
     # Player 2
     initial_state2 = Observable([0.8, 0.0, 0.0, 0.0])
     goal_position2 = Observable(get_random_point_within_ball((-0.8, 0.0), 0.1))
-    θ2 = GLMakie.@lift flatten_parameters(; initial_state = $initial_state2, goal_position = $goal_position2, obstacle_position = $obstacle_position)
+    θ2 = GLMakie.@lift flatten_parameters(;
+        initial_state = $initial_state2,
+        goal_position = $goal_position2,
+        obstacle_position = $obstacle_position,
+    )
 
     println("Player 1's goal_position:", goal_position1)
     println("Player 2's goal_position:", goal_position2)
@@ -186,30 +202,40 @@ function demo(; paused = false)
     tolerance = 1e-3
     trajectory1, trajectory2 = nothing, nothing
     cur_iter, error1, error2 = 0, 1.0, 1.0
-    while error  > tolerance 
-        (; problem) = get_setup(; dynamics, obstacle_radius, collision_dist, others = trajectory2)
-        strategy1 = GLMakie.@lift let 
+    while error > tolerance
+        (; problem) = get_setup(;
+            dynamics,
+            collision_avoidance_distance,
+            collision_dist,
+            others = trajectory2,
+        )
+        strategy1 = GLMakie.@lift let
             result = get_receding_horizon_solution(problem, $θ1; warmstart_solution)
             result.strategy # P1's best response
         end
 
         if !isnothing(trajectory1)
-            error1 = norm(hcat(trajectory1...)[1:2,:] - hcat(strategy1.val.xs...)[1:2,:])
+            error1 = norm(hcat(trajectory1...)[1:2, :] - hcat(strategy1.val.xs...)[1:2, :])
         end
         trajectory1 = strategy1.val.xs
-        
-        (; problem) = get_setup(; dynamics, obstacle_radius, collision_dist, others = trajectory1)
-        strategy2 = GLMakie.@lift let 
+
+        (; problem) = get_setup(;
+            dynamics,
+            collision_avoidance_distance,
+            collision_dist,
+            others = trajectory1,
+        )
+        strategy2 = GLMakie.@lift let
             result = get_receding_horizon_solution(problem, $θ2; warmstart_solution)
             result.strategy # P2's best response
         end
 
-        if !isnothing(trajectory2) 
-            error2 = norm(hcat(trajectory2...)[1:2,:] - hcat(strategy2.val.xs...)[1:2,:])
+        if !isnothing(trajectory2)
+            error2 = norm(hcat(trajectory2...)[1:2, :] - hcat(strategy2.val.xs...)[1:2, :])
         end
-        trajectory2 = strategy2.val.xs  
+        trajectory2 = strategy2.val.xs
 
-        error  = error1 + error2
+        error = error1 + error2
         cur_iter += 1
         println("$cur_iter th iteration, error is $error")
         if cur_iter > 10
@@ -217,7 +243,7 @@ function demo(; paused = false)
         end
     end
     #    end
-##
+    ##
     println("IBR Converged in $(cur_iter) iterations and the error is $(error)")
 
     Main.@infiltrate
@@ -290,14 +316,24 @@ function demo(; paused = false)
     end
 
     # visualize initial state
-    GLMakie.scatter!(axis, GLMakie.@lift(GLMakie.Point2f($initial_state1[1:2])), markersize = 20, color = :blue)
-    GLMakie.scatter!(axis, GLMakie.@lift(GLMakie.Point2f($initial_state2[1:2])), markersize = 20, color = :red)
+    GLMakie.scatter!(
+        axis,
+        GLMakie.@lift(GLMakie.Point2f($initial_state1[1:2])),
+        markersize = 20,
+        color = :blue,
+    )
+    GLMakie.scatter!(
+        axis,
+        GLMakie.@lift(GLMakie.Point2f($initial_state2[1:2])),
+        markersize = 20,
+        color = :red,
+    )
 
     # visualize obstacle position
     GLMakie.scatter!(
         axis,
         GLMakie.@lift(GLMakie.Point2f($obstacle_position)),
-        markersize = 2 * obstacle_radius * sqrt(2), # sqrt2 compensating for GLMakie bug
+        markersize = 2 * collision_avoidance_distance * sqrt(2), # sqrt2 compensating for GLMakie bug
         markerspace = :data,
         color = (:red, 0.5),
     )
@@ -326,7 +362,6 @@ function demo(; paused = false)
         compute_time = @elapsed if !is_paused[]
             initial_state1[] = strategy1[].xs[begin + 1]
             initial_state2[] = strategy2[].xs[begin + 1]
-
         end
         sleep(max(0.0, 0.1 - compute_time))
     end
