@@ -1,9 +1,12 @@
 module SimpleMPC
+
 export demo
+
 using TrajectoryGamesExamples: UnicycleDynamics
 using TrajectoryGamesBase:
     OpenLoopStrategy, unflatten_trajectory, state_dim, control_dim, control_bounds
 using GLMakie: GLMakie, Observable
+using LinearAlgebra: norm
 
 using OrderedPreferences
 
@@ -179,20 +182,45 @@ function demo(; paused = false)
     #   function get_iterated_best_response()
     # Player 1 goes first, then Player 2 responses based on Player 1's trajectory
     # Include collision avoidance priority constraint
-    (; problem) = get_setup(; dynamics, obstacle_radius, collision_dist, others = nothing)
-    strategy1 = GLMakie.@lift let 
-        result = get_receding_horizon_solution(problem, $θ1; warmstart_solution)
-        result.strategy # P1's best response
-    end
+    error = 1.0
+    tolerance = 1e-3
+    trajectory1, trajectory2 = nothing, nothing
+    cur_iter, error1, error2 = 0, 1.0, 1.0
+    while error  > tolerance 
+        (; problem) = get_setup(; dynamics, obstacle_radius, collision_dist, others = trajectory2)
+        strategy1 = GLMakie.@lift let 
+            result = get_receding_horizon_solution(problem, $θ1; warmstart_solution)
+            result.strategy # P1's best response
+        end
 
-    (; problem) = get_setup(; dynamics, obstacle_radius, collision_dist, others = strategy1.val.xs)
-    strategy2 = GLMakie.@lift let 
-        result = get_receding_horizon_solution(problem, $θ2; warmstart_solution)
-        result.strategy # P2's best response
-    end
+        if !isnothing(trajectory1)
+            error1 = norm(hcat(trajectory1...)[1:2,:] - hcat(strategy1.val.xs...)[1:2,:])
+        end
+        trajectory1 = strategy1.val.xs
+        
+        (; problem) = get_setup(; dynamics, obstacle_radius, collision_dist, others = trajectory1)
+        strategy2 = GLMakie.@lift let 
+            result = get_receding_horizon_solution(problem, $θ2; warmstart_solution)
+            result.strategy # P2's best response
+        end
 
+        if !isnothing(trajectory2) 
+            error2 = norm(hcat(trajectory2...)[1:2,:] - hcat(strategy2.val.xs...)[1:2,:])
+        end
+        trajectory2 = strategy2.val.xs  
+
+        error  = error1 + error2
+        cur_iter += 1
+        println("$cur_iter th iteration, error is $error")
+        if cur_iter > 10
+            break
+        end
+    end
     #    end
 ##
+    println("IBR Converged in $(cur_iter) iterations and the error is $(error)")
+
+    Main.@infiltrate
 
     # initial_state = Observable(zeros(state_dim(dynamics)))
     # goal_position = Observable([0.5, 0.5])
