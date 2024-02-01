@@ -14,7 +14,6 @@ function get_setup(;
     dynamics = UnicycleDynamics(),
     planning_horizon = 20,
     collision_avoidance_distance = 0.25,
-    collision_dist = 0.02,
 )
     state_dimension = state_dim(dynamics)
     control_dimension = control_dim(dynamics)
@@ -78,7 +77,6 @@ function get_setup(;
             mapreduce(vcat, 1:length(xs)) do k
                 px, py, v, θ = xs[k]
                 a, ω = us[k]
-
                 lateral_acceleration = v * ω
                 longitudinal_acceleration = a
                 acceleration_constarint =
@@ -131,11 +129,10 @@ end
 function demo(; paused = false)
     dynamics = UnicycleDynamics(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0]))
     collision_avoidance_distance = 0.25
-    collision_dist = 0.1
 
     # For computing initial trajectory
-    (; problem, flatten_parameters) =
-        get_setup(; dynamics, collision_avoidance_distance, collision_dist)
+    planning_horizon = 20
+    (; problem, flatten_parameters) = get_setup(; dynamics, planning_horizon, collision_avoidance_distance)
 
     # TODO: Now:
     #
@@ -172,201 +169,163 @@ function demo(; paused = false)
         [x, y]
     end
     ##
-    obstacle_position = Observable([0.0, 0.0])
-
     # Player 1
-    initial_state1 = Observable([-0.8, 0.0, 0.0, 0.0])
-    goal_position1 = Observable(get_random_point_within_ball((0.8, 0.0), 0.1))
-    θ1 = GLMakie.@lift flatten_parameters(;
-        initial_state = $initial_state1,
-        goal_position = $goal_position1,
-        obstacle_position = $obstacle_position,
+    initial_state1 = [-0.8, 0.0, 0.0, 0.0]
+    goal_position1 = get_random_point_within_ball((0.8, 0.0), 0.1)
+    θ1 = flatten_parameters(;
+        initial_state = initial_state1,
+        goal_position = goal_position1,
+        opponent_positions = zeros(2 * planning_horizon), # initially zeros
     )
 
     # Player 2
-    initial_state2 = Observable([0.8, 0.0, 0.0, 0.0])
-    goal_position2 = Observable(get_random_point_within_ball((-0.8, 0.0), 0.1))
-    θ2 = GLMakie.@lift flatten_parameters(;
-        initial_state = $initial_state2,
-        goal_position = $goal_position2,
-        obstacle_position = $obstacle_position,
+    initial_state2 = [0.8, 0.0, 0.0, 0.0]
+    goal_position2 = get_random_point_within_ball((-0.8, 0.0), 0.1)
+    θ2 = flatten_parameters(;
+        initial_state = initial_state2,
+        goal_position = goal_position2,
+        opponent_positions = zeros(2 * planning_horizon), # initially zeros
     )
 
     println("Player 1's goal_position:", goal_position1)
     println("Player 2's goal_position:", goal_position2)
 
-    #   function get_iterated_best_response()
-    # Player 1 goes first, then Player 2 responses based on Player 1's trajectory
-    # Include collision avoidance priority constraint
-    error = 1.0
-    tolerance = 1e-3
-    trajectory1, trajectory2 = nothing, nothing
-    cur_iter, error1, error2 = 0, 1.0, 1.0
-    while error > tolerance
-        (; problem) = get_setup(;
-            dynamics,
-            collision_avoidance_distance,
-            collision_dist,
-            others = trajectory2,
-        )
-        strategy1 = GLMakie.@lift let
-            result = get_receding_horizon_solution(problem, $θ1; warmstart_solution)
-            result.strategy # P1's best response
-        end
-
-        if !isnothing(trajectory1)
-            error1 = norm(hcat(trajectory1...)[1:2, :] - hcat(strategy1.val.xs...)[1:2, :])
-        end
-        trajectory1 = strategy1.val.xs
-
-        (; problem) = get_setup(;
-            dynamics,
-            collision_avoidance_distance,
-            collision_dist,
-            others = trajectory1,
-        )
-        strategy2 = GLMakie.@lift let
-            result = get_receding_horizon_solution(problem, $θ2; warmstart_solution)
-            result.strategy # P2's best response
-        end
-
-        if !isnothing(trajectory2)
-            error2 = norm(hcat(trajectory2...)[1:2, :] - hcat(strategy2.val.xs...)[1:2, :])
-        end
-        trajectory2 = strategy2.val.xs
-
-        error = error1 + error2
-        cur_iter += 1
-        println("$cur_iter th iteration, error is $error")
-        if cur_iter > 10
-            break
-        end
+    function best_response_map(parameters::Vector{Float64}, initial_guess::Union{Vector{Vector{Float64}}, Nothing})
+        solution = solve(problem, parameters; warmstart_solution = initial_guess)
+        unflatten_trajectory(solution.primals, state_dim(dynamics), control_dim(dynamics))
     end
-    #    end
-    ##
-    println("IBR Converged in $(cur_iter) iterations and the error is $(error)")
+
+    # Create best_response_maps
+    best_response_maps = [
+        (initial_guess) -> best_response_map(θ1, initial_guess),
+        (initial_guess) -> best_response_map(θ2, initial_guess),
+    ]
+    initial_trajectory_guesses = Union{Vector{Vector{Float64}}, Nothing}[nothing for _ in 1:length(best_response_maps)]
+
+    # Solve Nash
+    trajectories = solve_nash!(best_response_maps, initial_trajectory_guesses)
 
     Main.@infiltrate
 
     # initial_state = Observable(zeros(state_dim(dynamics)))
     # goal_position = Observable([0.5, 0.5])
     # obstacle_position = Observable([-0.5, 0.0])
-
+    #
     # θ = GLMakie.@lift flatten_parameters(;
     #     initial_state = $initial_state,
     #     goal_position = $goal_position,
     #     obstacle_position = $obstacle_position,
     # )
-
+    #
     # strategy = GLMakie.@lift let
     #     result = get_receding_horizon_solution($θ; warmstart_solution)
     #     warmstart_solution = result.solution
     #     result.strategy
     # end
+    #
+    # figure = GLMakie.Figure()
+    # axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-1, 1), (-1, 1)))
 
-    figure = GLMakie.Figure()
-    axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-1, 1), (-1, 1)))
+    # # mouse interaction
+    # # controlling the obstacle with the left mouse button
+    # is_obstacle_position_locked = GLMakie.Observable(true)
+    # GLMakie.on(GLMakie.events(figure).mouseposition, priority = 0) do _
+    #     if !is_obstacle_position_locked[]
+    #         obstacle_position[] = GLMakie.mouseposition(axis.scene)
+    #     end
+    #     GLMakie.Consume(false)
+    # end
+    # GLMakie.on(GLMakie.events(figure).mousebutton, priority = 0) do event
+    #     if event.button == GLMakie.Mouse.left
+    #         if event.action == GLMakie.Mouse.press
+    #             is_obstacle_position_locked[] = !is_obstacle_position_locked[]
+    #         end
+    #     end
+    #     GLMakie.Consume(false)
+    # end
+    # # controlling the goal position with the right mouse button
+    # is_goal_position_locked = GLMakie.Observable(true)
+    # GLMakie.on(GLMakie.events(figure).mouseposition, priority = 1) do _
+    #     if !is_goal_position_locked[]
+    #         goal_position1[] = GLMakie.mouseposition(axis.scene) # Control player 1
+    #     end
+    #     GLMakie.Consume(false)
+    # end
+    # GLMakie.on(GLMakie.events(figure).mousebutton, priority = 1) do event
+    #     if event.button == GLMakie.Mouse.right
+    #         if event.action == GLMakie.Mouse.press
+    #             is_goal_position_locked[] = !is_goal_position_locked[]
+    #         end
+    #     end
+    #     GLMakie.Consume(false)
+    # end
 
-    # mouse interaction
-    # controlling the obstacle with the left mouse button
-    is_obstacle_position_locked = GLMakie.Observable(true)
-    GLMakie.on(GLMakie.events(figure).mouseposition, priority = 0) do _
-        if !is_obstacle_position_locked[]
-            obstacle_position[] = GLMakie.mouseposition(axis.scene)
-        end
-        GLMakie.Consume(false)
-    end
-    GLMakie.on(GLMakie.events(figure).mousebutton, priority = 0) do event
-        if event.button == GLMakie.Mouse.left
-            if event.action == GLMakie.Mouse.press
-                is_obstacle_position_locked[] = !is_obstacle_position_locked[]
-            end
-        end
-        GLMakie.Consume(false)
-    end
-    # controlling the goal position with the right mouse button
-    is_goal_position_locked = GLMakie.Observable(true)
-    GLMakie.on(GLMakie.events(figure).mouseposition, priority = 1) do _
-        if !is_goal_position_locked[]
-            goal_position1[] = GLMakie.mouseposition(axis.scene) # Control player 1
-        end
-        GLMakie.Consume(false)
-    end
-    GLMakie.on(GLMakie.events(figure).mousebutton, priority = 1) do event
-        if event.button == GLMakie.Mouse.right
-            if event.action == GLMakie.Mouse.press
-                is_goal_position_locked[] = !is_goal_position_locked[]
-            end
-        end
-        GLMakie.Consume(false)
-    end
+    # # pause and stop buttons
+    # figure[2, 1] = buttongrid = GLMakie.GridLayout(tellwidth = false)
+    # is_paused = GLMakie.Observable(paused)
+    # buttongrid[1, 1] = pause_button = GLMakie.Button(figure, label = "Pause")
+    # GLMakie.on(pause_button.clicks) do _
+    #     is_paused[] = !is_paused[]
+    # end
 
-    # pause and stop buttons
-    figure[2, 1] = buttongrid = GLMakie.GridLayout(tellwidth = false)
-    is_paused = GLMakie.Observable(paused)
-    buttongrid[1, 1] = pause_button = GLMakie.Button(figure, label = "Pause")
-    GLMakie.on(pause_button.clicks) do _
-        is_paused[] = !is_paused[]
-    end
+    # is_stopped = GLMakie.Observable(false)
+    # buttongrid[1, 2] = stop_button = GLMakie.Button(figure, label = "Stop")
+    # GLMakie.on(stop_button.clicks) do _
+    #     is_stopped[] = !is_stopped[]
+    # end
 
-    is_stopped = GLMakie.Observable(false)
-    buttongrid[1, 2] = stop_button = GLMakie.Button(figure, label = "Stop")
-    GLMakie.on(stop_button.clicks) do _
-        is_stopped[] = !is_stopped[]
-    end
+    # # visualize initial state
+    # GLMakie.scatter!(
+    #     axis,
+    #     GLMakie.@lift(GLMakie.Point2f($initial_state1[1:2])),
+    #     markersize = 20,
+    #     color = :blue,
+    # )
+    # GLMakie.scatter!(
+    #     axis,
+    #     GLMakie.@lift(GLMakie.Point2f($initial_state2[1:2])),
+    #     markersize = 20,
+    #     color = :red,
+    # )
 
-    # visualize initial state
-    GLMakie.scatter!(
-        axis,
-        GLMakie.@lift(GLMakie.Point2f($initial_state1[1:2])),
-        markersize = 20,
-        color = :blue,
-    )
-    GLMakie.scatter!(
-        axis,
-        GLMakie.@lift(GLMakie.Point2f($initial_state2[1:2])),
-        markersize = 20,
-        color = :red,
-    )
+    # # visualize obstacle position
+    # GLMakie.scatter!(
+    #     axis,
+    #     GLMakie.@lift(GLMakie.Point2f($obstacle_position)),
+    #     markersize = 2 * collision_avoidance_distance * sqrt(2), # sqrt2 compensating for GLMakie bug
+    #     markerspace = :data,
+    #     color = (:red, 0.5),
+    # )
 
-    # visualize obstacle position
-    GLMakie.scatter!(
-        axis,
-        GLMakie.@lift(GLMakie.Point2f($obstacle_position)),
-        markersize = 2 * collision_avoidance_distance * sqrt(2), # sqrt2 compensating for GLMakie bug
-        markerspace = :data,
-        color = (:red, 0.5),
-    )
+    # # visualize goal position
+    # GLMakie.scatter!(
+    #     axis,
+    #     GLMakie.@lift(GLMakie.Point2f($goal_position1)),
+    #     markersize = 20,
+    #     color = :green,
+    # )
 
-    # visualize goal position
-    GLMakie.scatter!(
-        axis,
-        GLMakie.@lift(GLMakie.Point2f($goal_position1)),
-        markersize = 20,
-        color = :green,
-    )
+    # GLMakie.scatter!(
+    #     axis,
+    #     GLMakie.@lift(GLMakie.Point2f($goal_position2)),
+    #     markersize = 20,
+    #     color = :cyan,
+    # )
 
-    GLMakie.scatter!(
-        axis,
-        GLMakie.@lift(GLMakie.Point2f($goal_position2)),
-        markersize = 20,
-        color = :cyan,
-    )
+    # GLMakie.plot!(axis, strategy1)
+    # GLMakie.plot!(axis, strategy2)
 
-    GLMakie.plot!(axis, strategy1)
-    GLMakie.plot!(axis, strategy2)
+    # display(figure)
 
-    display(figure)
+    # while !is_stopped[]
+    #     compute_time = @elapsed if !is_paused[]
+    #         initial_state1[] = strategy1[].xs[begin + 1]
+    #         initial_state2[] = strategy2[].xs[begin + 1]
+    #     end
+    #     sleep(max(0.0, 0.1 - compute_time))
+    # end
 
-    while !is_stopped[]
-        compute_time = @elapsed if !is_paused[]
-            initial_state1[] = strategy1[].xs[begin + 1]
-            initial_state2[] = strategy2[].xs[begin + 1]
-        end
-        sleep(max(0.0, 0.1 - compute_time))
-    end
-
-    figure
+    # figure
 end
 
 end
