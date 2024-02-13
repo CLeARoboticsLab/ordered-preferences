@@ -13,7 +13,7 @@ using OrderedPreferences
 function get_setup(;
     dynamics = UnicycleDynamics(),
     planning_horizon = 20,
-    collision_avoidance_distance = 0.25,
+    collision_avoidance_distance = 0.15,
 )
     state_dimension = state_dim(dynamics)
     control_dimension = control_dim(dynamics)
@@ -132,7 +132,7 @@ function demo(; paused = false)
 
     # For computing initial trajectory
     planning_horizon = 20
-    (; problem, flatten_parameters) = get_setup(; dynamics, planning_horizon, collision_avoidance_distance)
+    (; problem, flatten_parameters, unflatten_parameters) = get_setup(; dynamics, planning_horizon, collision_avoidance_distance)
 
     # TODO: Now:
     #
@@ -190,17 +190,19 @@ function demo(; paused = false)
     println("Player 1's goal_position:", goal_position1)
     println("Player 2's goal_position:", goal_position2)
 
-    function best_response_map(parameters::Vector{Float64}, initial_guess::Union{Vector{Vector{Float64}}, Nothing}) 
-        # TODO: Update player's opponent_positions in θ
-
+    function best_response_map(parameters::Vector{Float64}, initial_guess::Union{Vector{Vector{Float64}}, Nothing}, opponent_positions::Union{Vector{Float64}, Nothing}) 
+        # Update player's opponent_positions in θ
+        if !isnothing(opponent_positions)
+            parameters[end - 2*planning_horizon + 1: end] = opponent_positions 
+        end
         solution = solve(problem, parameters; warmstart_solution = initial_guess)
         unflatten_trajectory(solution.primals, state_dim(dynamics), control_dim(dynamics)) 
     end
 
     # Create best_response_maps
     best_response_maps = [
-        (initial_guess) -> best_response_map(θ1, initial_guess),
-        (initial_guess) -> best_response_map(θ2, initial_guess),
+        (initial_guess, opponent_positions) -> best_response_map(θ1, initial_guess, opponent_positions),
+        (initial_guess, opponent_positions) -> best_response_map(θ2, initial_guess, opponent_positions),
     ]
     initial_trajectory_guesses = Union{Vector{Vector{Float64}}, Nothing}[nothing for _ in 1:length(best_response_maps)]
 

@@ -12,27 +12,26 @@ function solve_nash!(
     verbose = true,
 )
     player_converged = falses(length(best_response_maps))
+    opponent_positions_ii = nothing
 
     for kk in 1:max_iterations
-        for (ii, val) in enumerate(best_response_maps)
+        for (ii, val) in enumerate(best_response_maps) # For now, works for two-player case
             if !isnothing(initial_trajectory_guesses[ii])
                 initial_trajectory_guess_ii = initial_trajectory_guesses[ii]
             else
                 initial_trajectory_guess_ii = nothing
             end
             # error in solve() in parametric_ordered_preferences.jl. For now, use built-in guess mechanism
-            initial_trajectory_guess_ii = nothing
-            (; xs) = best_response_maps[ii](initial_trajectory_guess_ii)
+            (; xs) = best_response_maps[ii](nothing, opponent_positions_ii) #initial_trajectory_guess_ii = nothing
             response_ii = reduce(hcat, xs)[1:2, :] |> eachcol |> collect
-
+            opponent_positions_ii = reduce(vcat, response_ii)
             if isnothing(initial_trajectory_guess_ii) 
                 initial_trajectory_guess_ii = [zeros(length(response_ii[1])) for _ in 1:length(response_ii)] 
-            else 
-                initial_trajectory_guess_ii
             end
             innovation = norm(response_ii .- initial_trajectory_guess_ii)
             initial_trajectory_guesses[ii] = response_ii 
             player_converged[ii] = innovation <= convergence_tolerance
+            verbose && println("Player $ii's innovation at iteration $kk: $innovation")
         end
         if all(player_converged)
             verbose && println("Converged after $kk iterations.")
