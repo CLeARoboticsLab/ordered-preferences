@@ -175,24 +175,26 @@ function demo(; paused = false)
     θ1 = flatten_parameters(;
         initial_state = initial_state1,
         goal_position = goal_position1,
-        opponent_positions = zeros(2 * planning_horizon), # initially zeros
+        opponent_positions = zeros(2, planning_horizon) |> eachcol |> collect, # initially zeros 
     )
 
     # Player 2
     initial_state2 = [0.8, 0.0, 0.0, 0.0]
     goal_position2 = get_random_point_within_ball((-0.8, 0.0), 0.1)
-    θ2 = flatten_parameters(;
+    θ2 = flatten_parameters(; # θ is a flat (column) vector of parameters
         initial_state = initial_state2,
         goal_position = goal_position2,
-        opponent_positions = zeros(2 * planning_horizon), # initially zeros
+        opponent_positions = zeros(2, planning_horizon) |> eachcol |> collect, # initially zeros
     )
 
     println("Player 1's goal_position:", goal_position1)
     println("Player 2's goal_position:", goal_position2)
 
-    function best_response_map(parameters::Vector{Float64}, initial_guess::Union{Vector{Vector{Float64}}, Nothing})
+    function best_response_map(parameters::Vector{Float64}, initial_guess::Union{Vector{Vector{Float64}}, Nothing}) 
+        # TODO: Update player's opponent_positions in θ
+
         solution = solve(problem, parameters; warmstart_solution = initial_guess)
-        unflatten_trajectory(solution.primals, state_dim(dynamics), control_dim(dynamics))
+        unflatten_trajectory(solution.primals, state_dim(dynamics), control_dim(dynamics)) 
     end
 
     # Create best_response_maps
