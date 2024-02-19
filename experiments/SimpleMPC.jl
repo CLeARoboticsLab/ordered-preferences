@@ -313,9 +313,9 @@ function demo(; paused = false, record = false, filename = "SimpleMPC_with_two_p
     GLMakie.plot!(axis, strategy2)
 
     if record # record the simulation
-        # Record for 6 seconds at a rate of 5 fps
+        # Record for 7 seconds at a rate of 5 fps
         framerate = 10
-        frames = 1:framerate * 10
+        frames = 1:framerate * 7
         GLMakie.record(figure, filename, frames; framerate = framerate) do t
             initial_state1[] = strategy1[].xs[begin + 1]
             initial_state2[] = strategy2[].xs[begin + 1]
