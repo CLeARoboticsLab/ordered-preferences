@@ -6,7 +6,7 @@
 """
 function solve_nash!(
     best_response_maps::Vector{<:Function},
-    initial_trajectory_guesses::Vector{Union{Nothing, Vector{Vector{Float64}}}},
+    initial_trajectory_guesses::Vector{Union{Nothing, Vector{Vector{Float64}}}};
     convergence_tolerance::Float64 = 1e-3,
     max_iterations = 50,
     verbose = true,
@@ -17,21 +17,21 @@ function solve_nash!(
     for kk in 1:max_iterations
         for (ii, val) in enumerate(best_response_maps) # For now, works for two-player case
             if !isnothing(initial_trajectory_guesses[ii])
-                initial_trajectory_guess_ii = initial_trajectory_guesses[ii]
+                initial_trajectory_guess_ii = reduce(hcat, initial_trajectory_guesses[ii])[1:2, :] |> eachcol |> collect
             else
                 initial_trajectory_guess_ii = nothing
             end
             # error in solve() in parametric_ordered_preferences.jl. For now, use built-in guess mechanism
-            (; xs) = best_response_maps[ii](nothing, opponent_positions_ii) #initial_trajectory_guess_ii = nothing
-            response_ii = reduce(hcat, xs)[1:2, :] |> eachcol |> collect
+            (; strategy) = best_response_maps[ii](nothing, opponent_positions_ii) #initial_trajectory_guess_ii = nothing
+            response_ii = reduce(hcat, strategy.xs)[1:2, :] |> eachcol |> collect
             opponent_positions_ii = reduce(vcat, response_ii)
             if isnothing(initial_trajectory_guess_ii) 
                 initial_trajectory_guess_ii = [zeros(length(response_ii[1])) for _ in 1:length(response_ii)] 
             end
             innovation = norm(response_ii .- initial_trajectory_guess_ii)
-            initial_trajectory_guesses[ii] = response_ii 
+            initial_trajectory_guesses[ii] = strategy.xs
             player_converged[ii] = innovation <= convergence_tolerance
-            verbose && println("Player $ii's innovation at iteration $kk: $innovation")
+            #verbose && println("Player $ii's innovation at iteration $kk: $innovation")
         end
         if all(player_converged)
             verbose && println("Converged after $kk iterations.")

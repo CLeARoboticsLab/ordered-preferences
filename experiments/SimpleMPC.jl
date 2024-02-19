@@ -198,8 +198,8 @@ function demo(; paused = false)
             parameters[end - 2*planning_horizon + 1: end] = opponent_positions 
         end
         solution = solve(problem, parameters; warmstart_solution = initial_guess)
-        unflatten_trajectory(solution.primals, state_dim(dynamics), control_dim(dynamics))
-        #Main.@infiltrate 
+        trajectory = unflatten_trajectory(solution.primals, state_dim(dynamics), control_dim(dynamics))
+        (; strategy = OpenLoopStrategy(trajectory.xs, trajectory.us), solution)
     end
 
     # Create best_response_maps
@@ -213,35 +213,12 @@ function demo(; paused = false)
 
     # Solve Nash
     trajectories = GLMakie.@lift let 
-        solve_nash!($best_response_maps, initial_trajectory_guesses)
+        solve_nash!($best_response_maps, initial_trajectory_guesses; verbose = true)
     end
 
-    Main.@infiltrate
-
     # Visualize
-
-    # strategy = [OpenLoopStrategy()
-
     figure = GLMakie.Figure()
     axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-1, 1), (-1, 1)))
-
-    # # mouse interaction
-    # # controlling the obstacle with the left mouse button
-    # is_obstacle_position_locked = GLMakie.Observable(true)
-    # GLMakie.on(GLMakie.events(figure).mouseposition, priority = 0) do _
-    #     if !is_obstacle_position_locked[]
-    #         obstacle_position[] = GLMakie.mouseposition(axis.scene)
-    #     end
-    #     GLMakie.Consume(false)
-    # end
-    # GLMakie.on(GLMakie.events(figure).mousebutton, priority = 0) do event
-    #     if event.button == GLMakie.Mouse.left
-    #         if event.action == GLMakie.Mouse.press
-    #             is_obstacle_position_locked[] = !is_obstacle_position_locked[]
-    #         end
-    #     end
-    #     GLMakie.Consume(false)
-    # end
 
     # controlling the goal_position1 with the RIGHT mouse button
     is_goal_position1_locked = GLMakie.Observable(true)
@@ -329,25 +306,18 @@ function demo(; paused = false)
         color = :cyan,
     )
 
-    Main.@infiltrate
-    # Plot trajectories
-    strategy = GLMakie.@lift let 
-        [(xs = $trajectories[i],) for i in 1:length(best_response_maps[])]
-    end
-    Main.@infiltrate
-    GLMakie.@lift let 
-        for i in 1:length(strategy[])
-            GLMakie.plot!(axis, $strategy[i].xs)
-        end
-    end
-    # GLMakie.plot!(axis, strategy)
+    # visualize trajectories
+    strategy1 = GLMakie.@lift OpenLoopStrategy($trajectories[1], nothing)
+    strategy2 = GLMakie.@lift OpenLoopStrategy($trajectories[2], nothing)
+    GLMakie.plot!(axis, strategy1)
+    GLMakie.plot!(axis, strategy2)
 
     display(figure)
 
     while !is_stopped[]
         compute_time = @elapsed if !is_paused[]
-            initial_state1[] = strategy[][1].xs[begin + 1]
-            initial_state2[] = strategy[][2].xs[begin + 1]
+            initial_state1[] = strategy1[].xs[begin + 1]
+            initial_state2[] = strategy2[].xs[begin + 1]
         end
         sleep(max(0.0, 0.1 - compute_time))
     end
