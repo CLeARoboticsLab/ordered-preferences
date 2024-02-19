@@ -12,22 +12,21 @@ function solve_nash!(
     verbose = true,
 )
     player_converged = falses(length(best_response_maps))
+    solutions = Union{NamedTuple, Nothing}[nothing for _ in 1:length(best_response_maps)]
     opponent_positions_ii = nothing
 
     for kk in 1:max_iterations
-        for (ii, val) in enumerate(best_response_maps) # For now, works for two-player case
+        for (ii, val) in enumerate(best_response_maps) 
+            # For now, works for two-player case
+            (; strategy, solution) = best_response_maps[ii](solutions[ii], opponent_positions_ii) #initial_trajectory_guess_ii = nothing
+            solutions[ii] = solution
+            response_ii = reduce(hcat, strategy.xs)[1:2, :] |> eachcol |> collect
+            opponent_positions_ii = reduce(vcat, response_ii)
             if !isnothing(initial_trajectory_guesses[ii])
                 initial_trajectory_guess_ii = reduce(hcat, initial_trajectory_guesses[ii])[1:2, :] |> eachcol |> collect
             else
-                initial_trajectory_guess_ii = nothing
-            end
-            # error in solve() in parametric_ordered_preferences.jl. For now, use built-in guess mechanism
-            (; strategy) = best_response_maps[ii](nothing, opponent_positions_ii) #initial_trajectory_guess_ii = nothing
-            response_ii = reduce(hcat, strategy.xs)[1:2, :] |> eachcol |> collect
-            opponent_positions_ii = reduce(vcat, response_ii)
-            if isnothing(initial_trajectory_guess_ii) 
                 initial_trajectory_guess_ii = [zeros(length(response_ii[1])) for _ in 1:length(response_ii)] 
-            end
+            end            
             innovation = norm(response_ii .- initial_trajectory_guess_ii)
             initial_trajectory_guesses[ii] = strategy.xs
             player_converged[ii] = innovation <= convergence_tolerance

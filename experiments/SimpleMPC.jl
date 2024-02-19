@@ -192,7 +192,7 @@ function demo(; paused = false)
     println("Player 1's goal_position:", goal_position1)
     println("Player 2's goal_position:", goal_position2)
 
-    function best_response_map(parameters::Vector{Float64}, initial_guess::Union{Vector{Vector{Float64}}, Nothing}, opponent_positions::Union{Vector{Float64}, Nothing}) 
+    function best_response_map(parameters::Vector{Float64}, initial_guess::Union{NamedTuple, Nothing}, opponent_positions::Union{Vector{Float64}, Nothing}) 
         # Update player's opponent_positions in θ
         if !isnothing(opponent_positions)
             parameters[end - 2*planning_horizon + 1: end] = opponent_positions 
@@ -213,7 +213,7 @@ function demo(; paused = false)
 
     # Solve Nash
     trajectories = GLMakie.@lift let 
-        solve_nash!($best_response_maps, initial_trajectory_guesses; verbose = true)
+        solve_nash!($best_response_maps, initial_trajectory_guesses)
     end
 
     # Visualize
@@ -314,15 +314,19 @@ function demo(; paused = false)
 
     display(figure)
 
+    framerate = 60
+    timestamps = 1:100
     while !is_stopped[]
         compute_time = @elapsed if !is_paused[]
-            initial_state1[] = strategy1[].xs[begin + 1]
-            initial_state2[] = strategy2[].xs[begin + 1]
+            GLMakie.record(figure, "SimpleMPC_with_two_players.mp4", timestamps; framerate = framerate) do t
+                initial_state1[] = strategy1[].xs[begin + 1]
+                initial_state2[] = strategy2[].xs[begin + 1]
+            end
         end
-        sleep(max(0.0, 0.1 - compute_time))
+        # sleep(max(0.0, 0.1 - compute_time))
     end
 
-    figure
+    #figure
 end
 
 end
