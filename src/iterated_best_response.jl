@@ -30,7 +30,7 @@ function solve_nash!(
             innovation = norm(response_ii .- initial_trajectory_guess_ii)
             initial_trajectory_guesses[ii] = strategy.xs
             player_converged[ii] = innovation <= convergence_tolerance
-            #verbose && println("Player $ii's innovation at iteration $kk: $innovation")
+            verbose && println("Player $ii's innovation at iteration $kk: $innovation")
         end
         if all(player_converged)
             verbose && println("Converged after $kk iterations.")

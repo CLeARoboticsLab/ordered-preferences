@@ -13,7 +13,7 @@ using OrderedPreferences
 function get_setup(;
     dynamics = UnicycleDynamics(),
     planning_horizon = 20,
-    collision_avoidance_distance = 0.15,
+    collision_avoidance_distance = 0.25,
 )
     state_dimension = state_dim(dynamics)
     control_dimension = control_dim(dynamics)
@@ -126,9 +126,9 @@ function get_setup(;
     (; problem, flatten_parameters, unflatten_parameters)
 end
 
-function demo(; paused = false)
+function demo(; paused = false, record = false, filename = "SimpleMPC_with_two_players.mp4")
     dynamics = UnicycleDynamics(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0]))
-    collision_avoidance_distance = 0.25
+    collision_avoidance_distance = 0.30
 
     # For computing initial trajectory
     planning_horizon = 20
@@ -213,7 +213,7 @@ function demo(; paused = false)
 
     # Solve Nash
     trajectories = GLMakie.@lift let 
-        solve_nash!($best_response_maps, initial_trajectory_guesses)
+        solve_nash!($best_response_maps, initial_trajectory_guesses; verbose = false)
     end
 
     # Visualize
@@ -312,21 +312,26 @@ function demo(; paused = false)
     GLMakie.plot!(axis, strategy1)
     GLMakie.plot!(axis, strategy2)
 
-    display(figure)
-
-    framerate = 60
-    timestamps = 1:100
-    while !is_stopped[]
-        compute_time = @elapsed if !is_paused[]
-            GLMakie.record(figure, "SimpleMPC_with_two_players.mp4", timestamps; framerate = framerate) do t
+    if record # record the simulation
+        # Record for 6 seconds at a rate of 5 fps
+        framerate = 10
+        frames = 1:framerate * 10
+        GLMakie.record(figure, filename, frames; framerate = framerate) do t
+            initial_state1[] = strategy1[].xs[begin + 1]
+            initial_state2[] = strategy2[].xs[begin + 1]
+        end
+    else
+        display(figure)
+        while !is_stopped[]
+            compute_time = @elapsed if !is_paused[]
                 initial_state1[] = strategy1[].xs[begin + 1]
                 initial_state2[] = strategy2[].xs[begin + 1]
             end
+            sleep(max(0.0, 0.1 - compute_time))
         end
-        # sleep(max(0.0, 0.1 - compute_time))
+        figure
     end
-
-    #figure
+    
 end
 
 end
