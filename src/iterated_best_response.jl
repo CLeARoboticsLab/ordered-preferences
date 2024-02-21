@@ -18,7 +18,10 @@ function solve_nash!(
     for kk in 1:max_iterations
         for (ii, val) in enumerate(best_response_maps) 
             # For now, works for two-player case
+            #Main.@infiltrate
             (; strategy, solution) = best_response_maps[ii](solutions[ii], opponent_positions_ii) #initial_trajectory_guess_ii = nothing
+            # TODO: Add offset to account for time step shift
+            #Main.@infiltrate
             solutions[ii] = solution
             response_ii = reduce(hcat, strategy.xs)[1:2, :] |> eachcol |> collect
             opponent_positions_ii = reduce(vcat, response_ii)

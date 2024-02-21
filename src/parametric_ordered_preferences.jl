@@ -134,7 +134,8 @@ function solve(
     level_solutions = []
 
     for (level, optimization_problem) in enumerate(ordered_preferences_problem.subproblems)
-        initial_guess = zeros(total_dim(optimization_problem))
+        initial_guess = zeros(total_dim(optimization_problem)) 
+
         if !isnothing(warmstart_solution)
             if warmstart_strategy === :cascade || warmstart_strategy === :final
                 # concatenate the outer primals (appearing in all subproblems) with the slacks for this
@@ -162,10 +163,15 @@ function solve(
             else
                 error("invalid warmstart strategy")
             end
+        elseif !isnothing(warmstart_primals)
+            # warmstart primals even at the first start using previous level's primals
+            println("here")
+            initial_guess[1:length(warmstart_primals)] .= warmstart_primals 
         end
 
         parameter_value = vcat(θ, fixed_slacks)
         solution = solve(optimization_problem, parameter_value; initial_guess)
+        println("solution.status at level $level: ", solution.status)
         append!(
             fixed_slacks,
             solution.primals[(outermost_problem.primal_dimension + 1):end] .+ extra_slack,

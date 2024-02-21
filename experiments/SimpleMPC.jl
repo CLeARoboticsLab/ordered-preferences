@@ -126,7 +126,7 @@ function get_setup(;
     (; problem, flatten_parameters, unflatten_parameters)
 end
 
-function demo(; paused = false, record = false, filename = "SimpleMPC_with_two_players.mp4")
+function demo(; verbose = false, paused = false, record = false, filename = "SimpleMPC_with_two_players.mp4")
     dynamics = UnicycleDynamics(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0]))
     collision_avoidance_distance = 0.30
 
@@ -171,7 +171,7 @@ function demo(; paused = false, record = false, filename = "SimpleMPC_with_two_p
     ##
     # Player 1
     initial_state1 = Observable([-0.8, 0.0, 0.0, 0.0])
-    goal_position1 = Observable(get_random_point_within_ball((0.8, 0.0), 0.1))
+    goal_position1 = Observable([0.8137, -0.0279]) #Observable(get_random_point_within_ball((0.8, 0.0), 0.1))
     opponent_position1 = Observable(zeros(2, planning_horizon) |> eachcol |> collect) # initially zeros 
     θ1 = GLMakie.@lift flatten_parameters(; # θ is a flat (column) vector of parameters
         initial_state = $initial_state1,
@@ -181,7 +181,7 @@ function demo(; paused = false, record = false, filename = "SimpleMPC_with_two_p
 
     # Player 2
     initial_state2 = Observable([0.8, 0.0, 0.0, 0.0])
-    goal_position2 = Observable(get_random_point_within_ball((-0.8, 0.0), 0.1))
+    goal_position2 = Observable([-0.7241, 0.0306]) #Observable(get_random_point_within_ball((-0.8, 0.0), 0.1))
     opponent_position2 = Observable(zeros(2, planning_horizon) |> eachcol |> collect)
     θ2 = GLMakie.@lift flatten_parameters(; 
         initial_state = $initial_state2,
@@ -197,7 +197,7 @@ function demo(; paused = false, record = false, filename = "SimpleMPC_with_two_p
         if !isnothing(opponent_positions)
             parameters[end - 2*planning_horizon + 1: end] = opponent_positions 
         end
-        solution = solve(problem, parameters; warmstart_solution = initial_guess)
+        solution = solve(problem, parameters; warmstart_solution = initial_guess, warmstart_strategy = :parallel) # does better with parallel?
         trajectory = unflatten_trajectory(solution.primals, state_dim(dynamics), control_dim(dynamics))
         (; strategy = OpenLoopStrategy(trajectory.xs, trajectory.us), solution)
     end
@@ -213,7 +213,7 @@ function demo(; paused = false, record = false, filename = "SimpleMPC_with_two_p
 
     # Solve Nash
     trajectories = GLMakie.@lift let 
-        solve_nash!($best_response_maps, initial_trajectory_guesses; verbose = false)
+        solve_nash!($best_response_maps, initial_trajectory_guesses; verbose = verbose)
     end
 
     # Visualize
@@ -228,7 +228,7 @@ function demo(; paused = false, record = false, filename = "SimpleMPC_with_two_p
         end
         GLMakie.Consume(false)
     end
-    GLMakie.on(GLMakie.events(figure).mousebutton, priority = 1) do event
+    GLMakie.on(GLMakie.events(figure).mousebutton, priority = 0) do event
         if event.button == GLMakie.Mouse.right
             if event.action == GLMakie.Mouse.press
                 is_goal_position1_locked[] = !is_goal_position1_locked[]
@@ -237,22 +237,22 @@ function demo(; paused = false, record = false, filename = "SimpleMPC_with_two_p
         GLMakie.Consume(false)
     end
 
-        # controlling the goal_position2 with the LEFT mouse button
-        is_goal_position2_locked = GLMakie.Observable(true)
-        GLMakie.on(GLMakie.events(figure).mouseposition, priority = 1) do _
-            if !is_goal_position2_locked[]
-                goal_position2[] = GLMakie.mouseposition(axis.scene) # Control player 2
-            end
-            GLMakie.Consume(false)
-        end
-        GLMakie.on(GLMakie.events(figure).mousebutton, priority = 1) do event
-            if event.button == GLMakie.Mouse.left
-                if event.action == GLMakie.Mouse.press
-                    is_goal_position2_locked[] = !is_goal_position2_locked[]
-                end
-            end
-            GLMakie.Consume(false)
-        end
+        # # controlling the goal_position2 with the LEFT mouse button
+        # is_goal_position2_locked = GLMakie.Observable(true)
+        # GLMakie.on(GLMakie.events(figure).mouseposition, priority = 1) do _
+        #     if !is_goal_position2_locked[]
+        #         goal_position2[] = GLMakie.mouseposition(axis.scene) # Control player 2
+        #     end
+        #     GLMakie.Consume(false)
+        # end
+        # GLMakie.on(GLMakie.events(figure).mousebutton, priority = 1) do event
+        #     if event.button == GLMakie.Mouse.left
+        #         if event.action == GLMakie.Mouse.press
+        #             is_goal_position2_locked[] = !is_goal_position2_locked[]
+        #         end
+        #     end
+        #     GLMakie.Consume(false)
+        # end
 
     # pause and stop buttons
     figure[2, 1] = buttongrid = GLMakie.GridLayout(tellwidth = false)
@@ -313,7 +313,7 @@ function demo(; paused = false, record = false, filename = "SimpleMPC_with_two_p
     GLMakie.plot!(axis, strategy2)
 
     if record # record the simulation
-        # Record for 7 seconds at a rate of 5 fps
+        # Record for 7 seconds at a rate of 10 fps
         framerate = 10
         frames = 1:framerate * 7
         GLMakie.record(figure, filename, frames; framerate = framerate) do t
@@ -324,6 +324,7 @@ function demo(; paused = false, record = false, filename = "SimpleMPC_with_two_p
         display(figure)
         while !is_stopped[]
             compute_time = @elapsed if !is_paused[]
+                println("Update initial state1") # TODO: Asynchronous update
                 initial_state1[] = strategy1[].xs[begin + 1]
                 initial_state2[] = strategy2[].xs[begin + 1]
             end
