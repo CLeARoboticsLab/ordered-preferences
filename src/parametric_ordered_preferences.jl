@@ -165,7 +165,6 @@ function solve(
             end
         elseif !isnothing(warmstart_primals)
             # warmstart primals even at the first start using previous level's primals
-            println("here")
             initial_guess[1:length(warmstart_primals)] .= warmstart_primals 
         end
 

@@ -6,22 +6,21 @@
 """
 function solve_nash!(
     best_response_maps::Vector{<:Function},
-    initial_trajectory_guesses::Vector{Union{Nothing, Vector{Vector{Float64}}}};
+    initial_trajectory_guesses::Vector{Union{Nothing, Vector{Vector{Float64}}}},
+    solutions::Vector{Union{NamedTuple, Nothing}};
     convergence_tolerance::Float64 = 1e-3,
     max_iterations = 50,
     verbose = true,
 )
     player_converged = falses(length(best_response_maps))
-    solutions = Union{NamedTuple, Nothing}[nothing for _ in 1:length(best_response_maps)]
     opponent_positions_ii = nothing
 
     for kk in 1:max_iterations
         for (ii, val) in enumerate(best_response_maps) 
             # For now, works for two-player case
-            #Main.@infiltrate
-            (; strategy, solution) = best_response_maps[ii](solutions[ii], opponent_positions_ii) #initial_trajectory_guess_ii = nothing
-            # TODO: Add offset to account for time step shift
-            #Main.@infiltrate
+            # Main.@infiltrate
+            (; strategy, solution) = best_response_maps[ii](solutions[ii], opponent_positions_ii) 
+            # Main.@infiltrate 
             solutions[ii] = solution
             response_ii = reduce(hcat, strategy.xs)[1:2, :] |> eachcol |> collect
             opponent_positions_ii = reduce(vcat, response_ii)
@@ -33,17 +32,17 @@ function solve_nash!(
             innovation = norm(response_ii .- initial_trajectory_guess_ii)
             initial_trajectory_guesses[ii] = strategy.xs
             player_converged[ii] = innovation <= convergence_tolerance
-            verbose && println("Player $ii's innovation at iteration $kk: $innovation")
+            #verbose && println("Player $ii's innovation at iteration $kk: $innovation")
         end
         if all(player_converged)
-            verbose && println("Converged after $kk iterations.")
+            verbose && printstyled("Converged after $kk iterations.\n"; color = :blue)
             break
         end
     end
 
     if !all(player_converged)
-        verbose && println("Did not converge after $max_iterations iterations.")
+        verbose && printstyled("Did not converge after $max_iterations iterations.\n"; color = :red)
     end
 
-    initial_trajectory_guesses
+    (; trajectories = initial_trajectory_guesses, solutions)
 end

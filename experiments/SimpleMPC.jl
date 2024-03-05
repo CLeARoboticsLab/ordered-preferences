@@ -10,6 +10,8 @@ using LinearAlgebra: norm
 
 using OrderedPreferences
 
+# TODO: Add collision avoidance constraint to visualize lower-priority constraint violation
+
 function get_setup(;
     dynamics = UnicycleDynamics(),
     planning_horizon = 20,
@@ -134,14 +136,6 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sim
     planning_horizon = 20
     (; problem, flatten_parameters, unflatten_parameters) = get_setup(; dynamics, planning_horizon, collision_avoidance_distance)
 
-    # TODO: Now:
-    #
-    # 1. construct the `best_response_map` for each player as a callable:
-    #   `best_response_map(parameters::Vector{Float64}, initial_guess::Vector{Float64})::Vector{Float64}`
-    # 2. call `solve_nash` with the `best_response_map`s and an initial guess for the trajectory
-    #
-    # This whole logic will take the role of `get_receding_horizon_solution`.
-
     warmstart_solution = nothing
 
     function get_receding_horizon_solution(problem, θ; warmstart_solution)
@@ -189,6 +183,9 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sim
         opponent_positions = $opponent_position2,
     )
 
+    # Parameter Observable
+    θ = GLMakie.@lift vcat([$θ1, $θ2]) # concatenate the two players' parameters
+
     println("Player 1's goal_position:", goal_position1)
     println("Player 2's goal_position:", goal_position2)
 
@@ -209,12 +206,16 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sim
         (initial_guess, opponent_positions) -> best_response_map($θ2, initial_guess, opponent_positions)]
     end
 
-    initial_trajectory_guesses = Union{Vector{Vector{Float64}}, Nothing}[nothing for _ in 1:length(best_response_maps[])]
-
     # Solve Nash
-    trajectories = GLMakie.@lift let 
-        solve_nash!($best_response_maps, initial_trajectory_guesses; verbose = verbose)
+    # Between IBR (after initial state update), keep continuity of trajectories/opponent_positions 
+    Main.@infiltrate
+    initial_trajectory_guesses = Observable(Union{Vector{Vector{Float64}}, Nothing}[nothing for _ in 1:length(best_response_maps[])])
+    initial_solutions = Observable(Union{NamedTuple, Nothing}[nothing for _ in 1:length(best_response_maps[])])
+    result = GLMakie.@lift let 
+        solve_nash!($best_response_maps, initial_trajectory_guesses[], initial_solutions[]; verbose = verbose)
     end
+    initial_trajectory_guesses = GLMakie.@lift($result.trajectories) #TODO: Shift time by one
+    initial_solutions = GLMakie.@lift($result.solutions) #TODO: Shift time by one
 
     # Visualize
     figure = GLMakie.Figure()
@@ -307,8 +308,8 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sim
     )
 
     # visualize trajectories
-    strategy1 = GLMakie.@lift OpenLoopStrategy($trajectories[1], nothing)
-    strategy2 = GLMakie.@lift OpenLoopStrategy($trajectories[2], nothing)
+    strategy1 = GLMakie.@lift OpenLoopStrategy($result.trajectories[1], nothing) #$trajectories[1]
+    strategy2 = GLMakie.@lift OpenLoopStrategy($result.trajectories[2], nothing)
     GLMakie.plot!(axis, strategy1)
     GLMakie.plot!(axis, strategy2)
 
@@ -324,8 +325,11 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sim
         display(figure)
         while !is_stopped[]
             compute_time = @elapsed if !is_paused[]
-                println("Update initial state1") # TODO: Asynchronous update
+                #Main.@infiltrate
+                # TODO: Asynchronous update
+                println("Update initial state1") 
                 initial_state1[] = strategy1[].xs[begin + 1]
+                println("Update initial state2") 
                 initial_state2[] = strategy2[].xs[begin + 1]
             end
             sleep(max(0.0, 0.1 - compute_time))
