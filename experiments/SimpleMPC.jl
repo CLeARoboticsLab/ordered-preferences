@@ -21,7 +21,7 @@ function get_setup(;
     control_dimension = control_dim(dynamics)
     primal_dimension = (state_dimension + control_dimension) * planning_horizon
     goal_dimension = 2
-    opponent_trajectory_dimension = 2 * planning_horizon # one position element for each time step
+    opponent_trajectory_dimension = 2 * planning_horizon 
     parameter_dimension = state_dimension + goal_dimension + opponent_trajectory_dimension
 
     unflatten_parameters = function (θ)
@@ -110,21 +110,6 @@ function get_setup(;
         parameter_dimension,
     )
 
-    #function compute_optimized_trajectory(
-    #    initial_state,
-    #    goal_position,
-    #    opponent_positions;
-    #    warmstart_solution = nothing,
-    #)
-    #    θ = flatten_parameters(;
-    #        initial_state = initial_state,
-    #        goal_position = goal_position,
-    #        opponent_positions = opponent_positions,
-    #    )
-    #    solution = solve(problem, θ; warmstart_solution)
-    #    unflatten_trajectory(solution.primals, state_dimension, control_dimension)
-    #end
-    #
     (; problem, flatten_parameters, unflatten_parameters)
 end
 
