@@ -41,7 +41,7 @@ function solve_nash!(
     end
 
     if !all(player_converged)
-        verbose && printstyled("Did not converge after $max_iterations iterations.\n"; color = :red)
+        printstyled("Did not converge after $max_iterations iterations.\n"; color = :red)
     end
 
     (; trajectories = initial_trajectory_guesses, solutions)

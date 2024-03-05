@@ -165,7 +165,7 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sim
     ##
     # Player 1
     initial_state1 = Observable([-0.8, 0.0, 0.0, 0.0])
-    goal_position1 = Observable([0.8137, -0.0279]) #Observable(get_random_point_within_ball((0.8, 0.0), 0.1))
+    goal_position1 = Observable(get_random_point_within_ball((0.8, 0.0), 0.1)) #Observable([0.8137, -0.0279])
     opponent_position1 = Observable(zeros(2, planning_horizon) |> eachcol |> collect) # initially zeros 
     θ1 = GLMakie.@lift flatten_parameters(; # θ is a flat (column) vector of parameters
         initial_state = $initial_state1,
@@ -175,16 +175,13 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sim
 
     # Player 2
     initial_state2 = Observable([0.8, 0.0, 0.0, 0.0])
-    goal_position2 = Observable([-0.7241, 0.0306]) #Observable(get_random_point_within_ball((-0.8, 0.0), 0.1))
+    goal_position2 = Observable(get_random_point_within_ball((-0.8, 0.0), 0.1)) #Observable([-0.7241, 0.0306]) 
     opponent_position2 = Observable(zeros(2, planning_horizon) |> eachcol |> collect)
     θ2 = GLMakie.@lift flatten_parameters(; 
         initial_state = $initial_state2,
         goal_position = $goal_position2,
         opponent_positions = $opponent_position2,
     )
-
-    # Parameter Observable
-    θ = GLMakie.@lift vcat([$θ1, $θ2]) # concatenate the two players' parameters
 
     println("Player 1's goal_position:", goal_position1)
     println("Player 2's goal_position:", goal_position2)
@@ -208,7 +205,6 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sim
 
     # Solve Nash
     # Between IBR (after initial state update), keep continuity of trajectories/opponent_positions 
-    Main.@infiltrate
     initial_trajectory_guesses = Observable(Union{Vector{Vector{Float64}}, Nothing}[nothing for _ in 1:length(best_response_maps[])])
     initial_solutions = Observable(Union{NamedTuple, Nothing}[nothing for _ in 1:length(best_response_maps[])])
     result = GLMakie.@lift let 
@@ -269,18 +265,12 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sim
         is_stopped[] = !is_stopped[]
     end
 
-    # visualize initial states
+    # visualize initial states (account for asynchronous update)
     GLMakie.scatter!(
         axis,
-        GLMakie.@lift(GLMakie.Point2f($initial_state1[1:2])),
+        GLMakie.@lift([GLMakie.Point2f($θ1[1:2]), GLMakie.Point2f($initial_state2[1:2])]),
         markersize = 20,
-        color = :blue,
-    )
-    GLMakie.scatter!(
-        axis,
-        GLMakie.@lift(GLMakie.Point2f($initial_state2[1:2])),
-        markersize = 20,
-        color = :red,
+        color = [:blue, :red],
     )
 
     # # visualize obstacle position
@@ -318,17 +308,15 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sim
         framerate = 10
         frames = 1:framerate * 7
         GLMakie.record(figure, filename, frames; framerate = framerate) do t
-            initial_state1[] = strategy1[].xs[begin + 1]
+            θ1.val[1:state_dim(dynamics)] = strategy1[].xs[begin + 1]
             initial_state2[] = strategy2[].xs[begin + 1]
         end
     else
         display(figure)
         while !is_stopped[]
             compute_time = @elapsed if !is_paused[]
-                #Main.@infiltrate
-                # TODO: Asynchronous update
-                println("Update initial state1") 
-                initial_state1[] = strategy1[].xs[begin + 1]
+                # Asynchronous update: mutate p1's initial state without triggering others
+                θ1.val[1:state_dim(dynamics)] = strategy1[].xs[begin + 1]
                 println("Update initial state2") 
                 initial_state2[] = strategy2[].xs[begin + 1]
             end

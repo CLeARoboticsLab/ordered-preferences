@@ -170,7 +170,7 @@ function solve(
 
         parameter_value = vcat(θ, fixed_slacks)
         solution = solve(optimization_problem, parameter_value; initial_guess)
-        println("solution.status at level $level: ", solution.status)
+        #println("solution.status at level $level: ", solution.status)
         append!(
             fixed_slacks,
             solution.primals[(outermost_problem.primal_dimension + 1):end] .+ extra_slack,
