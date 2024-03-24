@@ -38,7 +38,7 @@ function ParametricOrderedPreferencesProblem(;
             slack_dimension_ii = length(prioritized_constraints_ii(dummy_primals, dummy_parameters))
         end
 
-        primal_dimension_ii = primal_dimension + slack_dimension_ii
+        primal_dimension_ii = primal_dimension + slack_dimension_ii #(x,s)
 
         if isnothing(priority_level)
             objective_ii = objective
