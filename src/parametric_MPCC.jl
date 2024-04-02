@@ -59,7 +59,6 @@ function ParametricMPCC(;
     elseif relaxation_mode === :l_infinity
         primal_dimension = primal_dimension + 1
         dummy_primals = zeros(primal_dimension)
-        inequality_dimension = length(inequality_constraints(dummy_primals, dummy_parameters)) + complementarity_dimension
         for ϵ in relaxations
             if isequal(ϵ, 0.0)
                 objective_ϵ = objective
@@ -74,7 +73,7 @@ function ParametricMPCC(;
                     [inequality_constraints(x,θ); complementarity_constraints(x,θ) .+ x[primal_dimension]]
                 end
             end
-
+            inequality_dimension = length(combined_inequality_constraints(dummy_primals, dummy_parameters))
             relaxed_problem = ParametricOptimizationProblem(;
                 objective = objective_ϵ,
                 equality_constraint = equality_constraints,
