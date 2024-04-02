@@ -75,7 +75,7 @@ function ParametricOptimizationProblem(;
     if isempty(g)
         g = Symbolics.Num[]
     end
-
+    
     h = inequality_constraint(x, θ)
     if isempty(h)
         h = Symbolics.Num[]

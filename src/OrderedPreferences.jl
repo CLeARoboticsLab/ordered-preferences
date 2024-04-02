@@ -12,4 +12,7 @@ export ParametricOptimizationProblem, solve, total_dim
 include("parametric_ordered_preferences.jl")
 export ParametricOrderedPreferencesProblem, solve
 
+include("parametric_MPCC.jl")
+export ParametricMPCC, solve_relaxed_mpcc
+
 end # module OrderedPreferences
