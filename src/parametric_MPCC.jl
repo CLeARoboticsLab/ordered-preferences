@@ -23,12 +23,7 @@ function ParametricMPCC(;
     @assert 0.0 < update_parameter < 1.0 "Update parameter must be in the range (0,1)"
 
     # Problem data
-    dummy_primals = zeros(primal_dimension)
     dummy_parameters = zeros(parameter_dimension)
-
-    equality_dimension = length(equality_constraints(dummy_primals, dummy_parameters))
-    complementarity_dimension = length(complementarity_constraints(dummy_primals, dummy_parameters))
-    inequality_dimension = length(inequality_constraints(dummy_primals, dummy_parameters)) + complementarity_dimension
 
     subproblems = (ParametricOptimizationProblem[])
 
@@ -37,6 +32,12 @@ function ParametricMPCC(;
     
     # Set relaxation mode
     if relaxation_mode === :standard
+        dummy_primals = zeros(primal_dimension)
+
+        equality_dimension = length(equality_constraints(dummy_primals, dummy_parameters))
+        complementarity_dimension = length(complementarity_constraints(dummy_primals, dummy_parameters))
+        inequality_dimension = length(inequality_constraints(dummy_primals, dummy_parameters)) + complementarity_dimension
+
         objective_ϵ = objective
         for ϵ in relaxations
             combined_inequality_constraints = function (x,θ)
@@ -59,6 +60,11 @@ function ParametricMPCC(;
     elseif relaxation_mode === :l_infinity
         primal_dimension = primal_dimension + 1
         dummy_primals = zeros(primal_dimension)
+
+        equality_dimension = length(equality_constraints(dummy_primals, dummy_parameters))
+        complementarity_dimension = length(complementarity_constraints(dummy_primals, dummy_parameters))
+        inequality_dimension = length(inequality_constraints(dummy_primals, dummy_parameters)) + complementarity_dimension
+
         for ϵ in relaxations
             if isequal(ϵ, 0.0)
                 objective_ϵ = objective
