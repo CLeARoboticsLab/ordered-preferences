@@ -9,7 +9,7 @@ function demo(;verbose = false)
     ϵ = 1.0
     κ = 0.1
     max_iterations = 10
-    relaxation_mode = :l_infinity
+    relaxation_mode = :standard
 
     # Lex Min QP Fiaschi (2021)
     Qₒ = [10 -2 4; 
@@ -54,7 +54,7 @@ function demo(;verbose = false)
         c2(x,θ);
         c3(x,θ);
         c4(x,θ);
-        x[3];
+        x[3:8];
     ] 
 
     complementarity_constraints(x,θ) = [
@@ -69,7 +69,7 @@ function demo(;verbose = false)
     
     MPCC_prob =  ParametricMPCC(; 
         objective = objective,
-        equality_constraints = equality_constraints_l_inf,
+        equality_constraints = equality_constraints,
         inequality_constraints = inequality_constraints,
         complementarity_constraints = complementarity_constraints,
         primal_dimension = primal_dimension,
