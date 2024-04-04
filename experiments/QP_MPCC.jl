@@ -74,7 +74,7 @@ function demo(;verbose = false)
     complementarity_constraints(x,θ) = [-(x[3]*c1(x,θ) + x[4]*c2(x,θ) + x[5]*c3(x,θ))]
     primal_dimension = 5
 """
-"""
+
     # Define QP_MPCC (Reformulation 3-2: replace complementarity constraints with a single inequality G(z)ᵀH(z) ≤ 0)
     objective(x,θ) = (x[1]-5)^2 + (2*x[2]+1)^2
 
@@ -90,31 +90,6 @@ function demo(;verbose = false)
     ] 
 
     complementarity_constraints(x,θ) = [-(x[3]*x[6] + x[4]*x[7] + x[5]*x[8])]
-    primal_dimension = 8
-"""
-
-    # Define Bilevel QP Clark-Westerberg (1990a)
-    objective(x,θ) = (x[1]-3)^2 + (x[2]-2)^2
-
-    equality_constraints(x,θ) = [
-        2*(x[2]-5) + x[3] - 2*x[4] + 2*x[5];
-        2*x[1] - x[2] + 1 - x[6];
-        -x[1] + 2*x[2] - 2 - x[7];
-        -x[1] - 2*x[2] + 14 - x[8];
-    ]
-    
-    c1(x,θ) = 2*x[1] - x[2] + 1
-    c2(x,θ) = -x[1] + 2*x[2] - 2
-    c3(x,θ) = -x[1] - 2*x[2] + 14
-    inequality_constraints(x,θ) = [
-        x;
-    ] 
-
-    complementarity_constraints(x,θ) = [
-        -x[3]*x[6];
-        -x[4]*x[7];
-        -x[5]*x[8];
-    ]
     primal_dimension = 8
 
 
