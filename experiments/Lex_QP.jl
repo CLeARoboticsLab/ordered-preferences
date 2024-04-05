@@ -12,6 +12,7 @@ function demo(;verbose = false)
     relaxation_mode = :l_infinity
 
     # Lex Min QP Fiaschi (2021)
+    # Two objectives:
     Qₒ = [10 -2 4; 
          -2 10 4; 
           4 4 4]  
