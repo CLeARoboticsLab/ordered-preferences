@@ -53,7 +53,7 @@ function demo(;verbose = false)
 
 
     # Define objective and constraints
-    objective(x,θ) = 2*(x[1]^2 + x[2]^2) + p'x[1:3]
+    objective(x,θ) = 0.5*x[1:3]'P*x[1:3] + p'x[1:3] #2*(x[1]^2 + x[2]^2)
 
     c1(x,θ) =  x[1] - x[2] - x[3] + 1
     c2(x,θ) =  x[1] + x[2] - x[3] + 1
