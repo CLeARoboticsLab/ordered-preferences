@@ -15,4 +15,7 @@ export ParametricOrderedPreferencesProblem, solve
 include("parametric_MPCC.jl")
 export ParametricMPCC, solve_relaxed_mpcc
 
+include("parametric_ordered_preferences_MPCC.jl")
+export ParametricOrderedPreferencesMPCC
+
 end # module OrderedPreferences

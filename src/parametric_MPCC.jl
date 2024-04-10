@@ -4,7 +4,7 @@ struct ParametricMPCC{T1<:Vector{<:ParametricOptimizationProblem}}
 end
 
 """
-Synthesize a parametric MPCC problem 
+Synthesize a parametric MPCC problem (suitable for bi-level programming)
 """
 
 function ParametricMPCC(;
@@ -43,7 +43,7 @@ function ParametricMPCC(;
         objective_ϵ = objective
         for ϵ in relaxations
 
-            if three_objective # TODO: this as well
+            if three_objective # TODO: Rewrite this as well
                 modified_inequality_constraints(x,θ) = [inequality_constraints(x,θ)[1:end-1]; inequality_constraints(x,θ)[end] + ϵ]
                 modified_complementarity_constraints(x,θ) = [complementarity_constraints(x,θ)[1:end-1]; complementarity_constraints(x,θ)[end] - x[19]*ϵ]
                 combined_inequality_constraints(x,θ) = [modified_inequality_constraints(x,θ); modified_complementarity_constraints(x,θ) .+ ϵ]
@@ -114,7 +114,7 @@ end
 """
 
 function solve_relaxed_mpcc(
-    problem::ParametricMPCC,
+    problem::Union{ParametricMPCC, ParametricOrderedPreferencesMPCC},
     initial_guess::Union{Nothing, Vector{Float64}},
     parameters;
     ϵ = 1.0,
