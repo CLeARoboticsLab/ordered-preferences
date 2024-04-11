@@ -44,7 +44,6 @@ function ParametricMPCC(;
             combined_inequality_constraints = function (x,ϵ)
                 [inequality_constraints(x,ϵ); complementarity_constraints(x,ϵ) .+ ϵ]
             end
-            Main.@infiltrate
             relaxed_problem = ParametricOptimizationProblem(;
                 objective = objective_ϵ,
                 equality_constraint = equality_constraints,
