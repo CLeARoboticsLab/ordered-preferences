@@ -26,12 +26,10 @@ function ParametricMPCC(;
     dummy_parameters = zeros(parameter_dimension)
 
     subproblems = (ParametricOptimizationProblem[])
-
+    
     # First subproblem is the original MPCC
     relaxations = vcat([0], relaxation_parameter * update_parameter.^(0:max_iterations))
     
-    three_objective = true # TODO: change this later
-
     # Set relaxation mode
     if relaxation_mode === :standard
         dummy_primals = zeros(primal_dimension)
@@ -43,17 +41,10 @@ function ParametricMPCC(;
         objective_ϵ = objective
         for ϵ in relaxations
 
-            if three_objective # TODO: Rewrite this as well
-                modified_inequality_constraints(x,θ) = [inequality_constraints(x,θ)[1:end-1]; inequality_constraints(x,θ)[end] + ϵ]
-                modified_complementarity_constraints(x,θ) = [complementarity_constraints(x,θ)[1:end-1]; complementarity_constraints(x,θ)[end] - x[19]*ϵ]
-                combined_inequality_constraints(x,θ) = [modified_inequality_constraints(x,θ); modified_complementarity_constraints(x,θ) .+ ϵ]
-
-            else
-                combined_inequality_constraints = function (x,θ)
-                    [inequality_constraints(x,θ); complementarity_constraints(x,θ) .+ ϵ]
-                end
+            combined_inequality_constraints = function (x,θ)
+                [inequality_constraints(x,θ); complementarity_constraints(x,θ) .+ ϵ]
             end
-
+            
             relaxed_problem = ParametricOptimizationProblem(;
                 objective = objective_ϵ,
                 equality_constraint = equality_constraints,
@@ -114,7 +105,7 @@ end
 """
 
 function solve_relaxed_mpcc(
-    problem::Union{ParametricMPCC, ParametricOrderedPreferencesMPCC},
+    problem::ParametricMPCC,
     initial_guess::Union{Nothing, Vector{Float64}},
     parameters;
     ϵ = 1.0,
