@@ -132,6 +132,8 @@ function ParametricOrderedPreferencesMPCC(;
         end
     end
 
+    Main.@infiltrate
+
     ParametricMPCC(;
         objective,
         equality_constraints,

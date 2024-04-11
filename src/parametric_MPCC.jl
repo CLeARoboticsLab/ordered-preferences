@@ -40,11 +40,11 @@ function ParametricMPCC(;
 
         objective_ϵ = objective
         for ϵ in relaxations
-
-            combined_inequality_constraints = function (x,θ)
-                [inequality_constraints(x,θ); complementarity_constraints(x,θ) .+ ϵ]
+            # Same scheduling of relaxation parameters for all levels 
+            combined_inequality_constraints = function (x,ϵ)
+                [inequality_constraints(x,ϵ); complementarity_constraints(x,ϵ) .+ ϵ]
             end
-            
+            Main.@infiltrate
             relaxed_problem = ParametricOptimizationProblem(;
                 objective = objective_ϵ,
                 equality_constraint = equality_constraints,

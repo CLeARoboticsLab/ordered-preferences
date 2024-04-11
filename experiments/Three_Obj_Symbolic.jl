@@ -9,8 +9,9 @@ function demo(;verbose = false)
     ϵ = 1.0
     κ = 0.1
     max_iterations = 10
-    relaxation_mode = :l_infinity
-
+    relaxation_mode = :standard
+    println("relaxation_mode: ", relaxation_mode)
+    
     # Lex Min QP Fiaschi (2021)
     # Three objectives:
     c = [-1; -1; -1]
