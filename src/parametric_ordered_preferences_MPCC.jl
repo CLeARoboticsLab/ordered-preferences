@@ -16,11 +16,10 @@ function ParametricOrderedPreferencesMPCC(;
     parameter_dimension,
     equality_dimension,
     inequality_dimension,
-    preferences_dimension,
     relaxation_parameter,
     update_parameter,
     max_iterations,
-    relaxation_mode = :standard, #TODO l_infinity mode
+    relaxation_mode = :standard, 
 )
     # Problem data
     ordered_priority_levels = eachindex(prioritized_preferences)
@@ -35,7 +34,7 @@ function ParametricOrderedPreferencesMPCC(;
     equality_dimension_ii = equality_dimension
 
     function set_up_level(priority_level)
-        #TODO: Implement priority objective (for now) vs priority constraints (slacks are required)
+        #TODO: Implement priority objective (for now) vs priority constraints 
         primal_dimension_ii = primal_dimension + dual_dimension
 
         priority_preferences_ii = prioritized_preferences[priority_level]
@@ -57,7 +56,7 @@ function ParametricOrderedPreferencesMPCC(;
         end
 
         # Build symbolic expression for objective and constraints. 
-        objective_ii = priority_preferences_ii(x, θ) # TODO: could be (a vector of) priority constraints
+        objective_ii = priority_preferences_ii(x, θ) 
         
         g_ii = mapreduce(vcat, inner_equality_constraints) do constraint
                 constraint(x,θ)
@@ -92,12 +91,10 @@ function ParametricOrderedPreferencesMPCC(;
 
         # Complementarity constraints from inequality constraints.
         complementarity = -h_ii .* λ
-
-        #TODO: Use θ = [ϵ₀, ϵ₁,... ϵₖ] to address relaxation parameters 
-        #TODO: Might contain slacks after ϵₖ?  
+  
         # Reduce relaxed complementarity_constraints into a single inequality and concatenate.
         if priority_level < last(ordered_priority_levels)
-            relaxed_complementarity = sum(complementarity) + θ[priority_level]
+            relaxed_complementarity = sum(complementarity) + θ[priority_level] #TODO: Is this right?
             callable_complementarity = Symbolics.build_function(relaxed_complementarity, z̃, θ, expression=Val{false})
             push!(inner_inequality_constraints, callable_complementarity)
         else

@@ -5,13 +5,6 @@ using OrderedPreferences
 
 function demo(;verbose = false)
 
-    # Algorithm setting 
-    ϵ = 1.0
-    κ = 0.1
-    max_iterations = 10
-    relaxation_mode = :standard
-    println("relaxation_mode: ", relaxation_mode)
-    
     # Lex Min QP Fiaschi (2021)
     # Three objectives:
     c = [-1; -1; -1]
@@ -52,13 +45,22 @@ function demo(;verbose = false)
         end,
     ]
 
-    preferences_dimension = length(prioritized_preferences)
+    # Problem setting 
     primal_dimension = 3
-    parameters = [0] # contain relaxation parameter for inner levels # TODO: modify to contain relaxation parameters
-    parameter_dimension =  length(parameters)
-    @assert parameter_dimension == preferences_dimension - 1 # same as no. of intermediate inner levels 
+
+    preferences_dimension = length(prioritized_preferences)
+    parameters = zeros(preferences_dimension - 1) 
+    parameter_dimension = length(parameters) #same as no. of intermediate inner levels 
     equality_dimension = length(equality_constraints(zeros(primal_dimension), zeros(parameter_dimension)))
     inequality_dimension = length(inequality_constraints(zeros(primal_dimension), zeros(parameter_dimension)))
+    
+    # Algorithm setting 
+    ϵ = 1.0
+    κ = 0.1
+    max_iterations = 10
+    tolerance = 1e-7
+    relaxation_mode = :standard
+    println("relaxation_mode: ", relaxation_mode)
 
     POP_prob = ParametricOrderedPreferencesMPCC(;
         objective,
@@ -69,15 +71,13 @@ function demo(;verbose = false)
         parameter_dimension,
         equality_dimension,
         inequality_dimension,
-        preferences_dimension,
         relaxation_parameter = ϵ,
         update_parameter = κ,
         max_iterations,
         relaxation_mode,
     )
-    
+
     # Solve POP
-    tolerance = 1e-7
     (; relaxation, solution, residual) = 
         solve_relaxed_mpcc(POP_prob, nothing, parameters; ϵ, κ, max_iterations, tolerance, verbose)
     println("relaxation: ", relaxation)

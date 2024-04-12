@@ -41,8 +41,9 @@ function ParametricMPCC(;
         objective_ϵ = objective
         for ϵ in relaxations
             # Same scheduling of relaxation parameters for all levels 
-            combined_inequality_constraints = function (x,ϵ)
-                [inequality_constraints(x,ϵ); complementarity_constraints(x,ϵ) .+ ϵ]
+            ϵ_inner = ϵ*ones(parameter_dimension) # [ϵ₁,...,ϵₖ]
+            combined_inequality_constraints = function (x,ϵ_inner) 
+                [inequality_constraints(x,ϵ_inner); complementarity_constraints(x,ϵ_inner) .+ ϵ]
             end
             relaxed_problem = ParametricOptimizationProblem(;
                 objective = objective_ϵ,
@@ -66,17 +67,18 @@ function ParametricMPCC(;
         inequality_dimension = length(inequality_constraints(dummy_primals, dummy_parameters)) + complementarity_dimension
 
         for ϵ in relaxations
+            ϵ_inner = ϵ*ones(parameter_dimension)
             if isequal(ϵ, 0.0)
                 objective_ϵ = objective
                 combined_inequality_constraints = function (x,θ)
                     [inequality_constraints(x,θ); complementarity_constraints(x,θ)]
                 end
             else
-                objective_ϵ = function (x,θ)
+                objective_ϵ = function (x,θ)  
                     objective(x,θ) +  x[primal_dimension] / ϵ
                 end
-                combined_inequality_constraints = function (x,θ)
-                    [inequality_constraints(x,θ); complementarity_constraints(x,θ) .+ x[primal_dimension]]
+                combined_inequality_constraints = function (x,ϵ_inner)
+                    [inequality_constraints(x,ϵ_inner); complementarity_constraints(x,ϵ_inner) .+ x[primal_dimension]]
                 end
             end
             inequality_dimension = length(combined_inequality_constraints(dummy_primals, dummy_parameters))
