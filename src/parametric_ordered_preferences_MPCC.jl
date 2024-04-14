@@ -1,3 +1,9 @@
+struct ParametricOrderedPreferencesMPCC{T1<:ParametricOptimizationProblem, T2, T3}
+    relaxed_problem::T1
+    exact_complementarity_constraints::T2
+    objective::T3
+end
+
 """
 Synthesizes a parametric ordered preferences problem as an MPCC 
 (an optimization problem with single objective and KKT constraints resulting from inner levels)
@@ -21,12 +27,14 @@ function ParametricOrderedPreferencesMPCC(;
 
     inner_equality_constraints = Function[equality_constraints] 
     inner_inequality_constraints = Function[inequality_constraints]
-    complementarity_constraints = Function[]
+    inner_complementarity_constraints = Function[]
+    final_complementarity_constraint = Function[]
 
     inequality_dimension_ii = inequality_dimension
     equality_dimension_ii = equality_dimension
 
-    augmented_parameter_dimension = parameter_dimension + 1 # one extra parameter for relaxation
+    # one extra parameter for relaxation
+    augmented_parameter_dimension = parameter_dimension + 1 
 
     function set_up_level(priority_level)
         #TODO: Implement priority objective (for now) vs priority constraints 
@@ -87,51 +95,166 @@ function ParametricOrderedPreferencesMPCC(;
         # Complementarity constraints from inequality constraints.
         complementarity = -h_ii .* λ
   
-        # Reduce relaxed complementarity_constraints into a single inequality and concatenate.
+        # Reduce relaxed (inner) complementarity_constraints into a single inequality and concatenate.
+        # Exact problem has no relaxation.
         if priority_level < last(ordered_priority_levels)
-            relaxed_complementarity = sum(complementarity) + θ[augmented_parameter_dimension] # The last parameter is the relaxation parameter
-            callable_complementarity = Symbolics.build_function(relaxed_complementarity, z̃, θ, expression=Val{false})
-            push!(inner_inequality_constraints, callable_complementarity)
-        else
+            for problem in (:relaxed, :exact)
+                if problem === :relaxed
+                    relaxed_complementarity = sum(complementarity) + θ[augmented_parameter_dimension] # The last parameter is the relaxation parameter
+                    callable_complementarity = Symbolics.build_function(relaxed_complementarity, z̃, θ, expression=Val{false})
+                    push!(inner_inequality_constraints, callable_complementarity)
+                else
+                    callable_complementarity = Symbolics.build_function(complementarity, z̃, θ, expression=Val{false})[1]
+                    push!(inner_complementarity_constraints, callable_complementarity)
+                end
+            end
+        else 
             # Final level: relaxation happens in MPCC 
             relaxed_complementarity = complementarity
-            callable_complementarity = Symbolics.build_function(relaxed_complementarity, z̃, θ, expression=Val{false})[1]
-            push!(complementarity_constraints, callable_complementarity)
+            final_complementarity = Symbolics.build_function(relaxed_complementarity, z̃, θ, expression=Val{false})[1]
+            push!(final_complementarity_constraint, final_complementarity)
         end
-
+        
         # Update dual dimension, inequality and equality dimension for the next level. 
         dual_dimension += inequality_dimension_ii + equality_dimension_ii
         inequality_dimension_ii += length(dual_nonnegativity) + length(relaxed_complementarity)
         equality_dimension_ii += length(stationarity)
-
     end
 
+    # Build KKT system for each priority level
     for priority_level in ordered_priority_levels
         set_up_level(priority_level)
     end
     
+    # Problem setting for final/outermost level 
     primal_dimension = primal_dimension + dual_dimension
+    dummy_primals = zeros(primal_dimension)
+    dummy_parameters = zeros(augmented_parameter_dimension)
 
     equality_constraints = function(x,θ)
         mapreduce(vcat, inner_equality_constraints) do constraint
             constraint(x,θ)
         end
     end
+    equality_dimension = length(equality_constraints(dummy_primals, dummy_parameters))
 
     inequality_constraints = function(x,θ)
         mapreduce(vcat, inner_inequality_constraints) do constraint
             constraint(x,θ)
         end
     end
+    exact_final_complementarity = function (x,θ)
+        final_complementarity_constraint[1](x,θ)
+    end
+    inequality_dimension = length(inequality_constraints(dummy_primals, dummy_parameters)) + length(exact_final_complementarity(dummy_primals, dummy_parameters))
 
-    ParametricMPCC(;
-        objective,
-        equality_constraints,
-        inequality_constraints,
-        complementarity_constraints = complementarity_constraints[1], # Φ(Gᵢ(x), Hᵢ(x)) ≤ 0, i = 1,...,m
-        primal_dimension,   
+    # Use the exact complementarity constraints to evaluate convergence
+    exact_complementarity_constraints = function (x,θ)
+    [
+        exact_final_complementarity(x,θ); 
+        mapreduce(vcat, inner_complementarity_constraints) do constraint
+            constraint(x,θ)
+        end
+    ]
+    end
+
+    if relaxation_mode === :standard
+        objective_ϵ = objective
+
+        combined_inequality_constraints = function (x,θ) 
+            [
+                inequality_constraints(x,θ); 
+                exact_final_complementarity(x,θ) .+ θ[augmented_parameter_dimension]
+            ]
+        end
+
+    elseif relaxation_mode === :l_infinity
+        primal_dimension = primal_dimension + 1
+
+        objective_ϵ = function (x,θ)  
+            objective(x,θ) + x[primal_dimension] ./ θ[augmented_parameter_dimension]
+        end
+        combined_inequality_constraints = function (x,θ)
+            [
+                inequality_constraints(x,θ); 
+                exact_final_complementarity(x,θ) .+ x[primal_dimension]
+            ]
+        end
+
+    else
+        error("Unknown relaxation mode: $relaxation_mode")
+    end
+    
+    relaxed_problem = ParametricOptimizationProblem(;
+        objective = objective_ϵ, 
+        equality_constraint = equality_constraints,
+        inequality_constraint = combined_inequality_constraints,
         parameter_dimension = augmented_parameter_dimension,
-        relaxation_mode,
-    )
+        primal_dimension,
+        equality_dimension,
+        inequality_dimension,
+    )    
+    ParametricOrderedPreferencesMPCC(relaxed_problem, exact_complementarity_constraints, objective)
 end
 
+function solve_relaxed_pop(
+    problem::ParametricOrderedPreferencesMPCC,
+    initial_guess::Union{Nothing, Vector{Float64}},
+    parameters;
+    ϵ = 1.0,
+    κ = 0.1,
+    max_iterations = 10,
+    tolerance = 1e-7,
+    verbose = false
+)
+    solutions = []
+
+    relaxed_problem = problem.relaxed_problem
+    exact_complementarity_constraints = problem.exact_complementarity_constraints
+    original_objective = problem.objective
+
+    if isnothing(initial_guess)
+        initial_guess = zeros(total_dim(relaxed_problem))
+    end
+
+    complementarity_residual = 1.0
+
+    relaxations = ϵ * κ.^(0:max_iterations) # [1.0, 0.1, 0.01, ... 1e-10]
+    ii = 1 
+    while complementarity_residual > tolerance && ii ≤ max_iterations + 1
+        # If the relaxed problem is infeasible, terminate. Otherwise solve the relaxed problem for xᵏ⁺¹
+        ϵ = relaxations[ii]
+        augmented_parameters = vcat(parameters, ϵ)
+        solution = solve(relaxed_problem, augmented_parameters; initial_guess)
+        if verbose
+            println("ii: ", ii)
+            println("status: ", solution.status)
+            println("primals: ", solution.primals)
+            println("objective: ", original_objective(solution.primals, augmented_parameters)) 
+        end
+
+        if string(solution.status) != "MCP_Solved" 
+            verbose && printstyled("Could not solve relaxed problem at relaxation factor $(ii).\n"; color = :red)
+            break
+        end
+        # Check complementarity residual
+        complementarity_violations = exact_complementarity_constraints(solution.primals, augmented_parameters)
+        complementarity_residual = findmax(-complementarity_violations)[1]
+
+        # Stop if iteration does not improve. Otherwise update initial_guess
+        if norm(initial_guess - solution.variables) < tolerance
+            verbose && printstyled("Converged at iteration $(ii).\n"; color = :green)
+            break
+        else
+            initial_guess = solution.variables 
+            push!(solutions, solution)
+        end
+
+        # Begin next iteration
+        ϵ = κ * ϵ
+        ii += 1
+    end
+
+    verbose && println("complementarity_residual: ", complementarity_residual)
+    (; relaxation = ϵ, solution = solutions, residual = complementarity_residual) #TODO solutions[end]
+end 
