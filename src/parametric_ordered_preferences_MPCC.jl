@@ -1,7 +1,3 @@
-# struct ParametricOrderedPreferencesMPCC{T1<:Vector{<:ParametricOptimizationProblem}}
-#     subproblems::T1
-# end
-
 """
 Synthesizes a parametric ordered preferences problem as an MPCC 
 (an optimization problem with single objective and KKT constraints resulting from inner levels)
@@ -16,9 +12,6 @@ function ParametricOrderedPreferencesMPCC(;
     parameter_dimension,
     equality_dimension,
     inequality_dimension,
-    relaxation_parameter,
-    update_parameter,
-    max_iterations,
     relaxation_mode = :standard, 
 )
     # Problem data
@@ -32,6 +25,8 @@ function ParametricOrderedPreferencesMPCC(;
 
     inequality_dimension_ii = inequality_dimension
     equality_dimension_ii = equality_dimension
+
+    augmented_parameter_dimension = parameter_dimension + 1 # one extra parameter for relaxation
 
     function set_up_level(priority_level)
         #TODO: Implement priority objective (for now) vs priority constraints 
@@ -48,8 +43,8 @@ function ParametricOrderedPreferencesMPCC(;
         λ = z[Block(2)]
         μ = z[Block(3)]
 
-        # Define symbolic variables for parameters.
-        θ̃ = only(Symbolics.@variables(θ̃[1:parameter_dimension]))
+        # Define symbolic variables for (augmented) parameters.
+        θ̃ = only(Symbolics.@variables(θ̃[1:augmented_parameter_dimension]))
         θ = Symbolics.scalarize(θ̃)
         if isempty(θ)
             θ = Symbolics.Num[]
@@ -94,7 +89,7 @@ function ParametricOrderedPreferencesMPCC(;
   
         # Reduce relaxed complementarity_constraints into a single inequality and concatenate.
         if priority_level < last(ordered_priority_levels)
-            relaxed_complementarity = sum(complementarity) + θ[priority_level] #TODO: Is this right?
+            relaxed_complementarity = sum(complementarity) + θ[augmented_parameter_dimension] # The last parameter is the relaxation parameter
             callable_complementarity = Symbolics.build_function(relaxed_complementarity, z̃, θ, expression=Val{false})
             push!(inner_inequality_constraints, callable_complementarity)
         else
@@ -135,10 +130,7 @@ function ParametricOrderedPreferencesMPCC(;
         inequality_constraints,
         complementarity_constraints = complementarity_constraints[1], # Φ(Gᵢ(x), Hᵢ(x)) ≤ 0, i = 1,...,m
         primal_dimension,   
-        parameter_dimension,
-        relaxation_parameter,
-        update_parameter,
-        max_iterations,
+        parameter_dimension = augmented_parameter_dimension,
         relaxation_mode,
     )
 end

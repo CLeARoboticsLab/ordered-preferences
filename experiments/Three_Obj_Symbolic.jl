@@ -47,10 +47,9 @@ function demo(;verbose = false)
 
     # Problem setting 
     primal_dimension = 3
+    parameter_dimension = 2 # stay user defined
+    parameters = ones(parameter_dimension) # dummy for now
 
-    preferences_dimension = length(prioritized_preferences)
-    parameters = zeros(preferences_dimension - 1) 
-    parameter_dimension = length(parameters) #same as no. of intermediate inner levels 
     equality_dimension = length(equality_constraints(zeros(primal_dimension), zeros(parameter_dimension)))
     inequality_dimension = length(inequality_constraints(zeros(primal_dimension), zeros(parameter_dimension)))
     
@@ -62,7 +61,7 @@ function demo(;verbose = false)
     relaxation_mode = :standard
     println("relaxation_mode: ", relaxation_mode)
 
-    POP_prob = ParametricOrderedPreferencesMPCC(;
+    POP_prob = ParametricOrderedPreferencesMPCC(; # Stay parametrized by θ where θ(end) is the relaxation parameter
         objective,
         equality_constraints,
         inequality_constraints,
@@ -71,9 +70,6 @@ function demo(;verbose = false)
         parameter_dimension,
         equality_dimension,
         inequality_dimension,
-        relaxation_parameter = ϵ,
-        update_parameter = κ,
-        max_iterations,
         relaxation_mode,
     )
 
