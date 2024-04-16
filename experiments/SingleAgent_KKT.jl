@@ -7,7 +7,7 @@ using GLMakie: GLMakie, Observable
 
 using OrderedPreferences
 
-function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obstacle_radius = 0.25)
+function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 2, obstacle_radius = 0.25, relaxation_mode = :standard)
     state_dimension = state_dim(dynamics)
     control_dimension = control_dim(dynamics)
     primal_dimension = (state_dimension + control_dimension) * planning_horizon
@@ -26,14 +26,14 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
     end
 
     objective = function (z, θ)
-        (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+        (; xs, us) = unflatten_trajectory(z[1:primal_dimension], state_dimension, control_dimension)
         (; goal_position) = unflatten_parameters(θ)
 
         sum(sum(u .^ 2) for u in us)
     end
 
     equality_constraints = function (z, θ)
-        (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+        (; xs, us) = unflatten_trajectory(z[1:primal_dimension], state_dimension, control_dimension)
         (; initial_state) = unflatten_parameters(θ)
         initial_state_constraint = xs[1] - initial_state
         dynamics_constraints = mapreduce(vcat, 2:length(xs)) do k
@@ -41,30 +41,19 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
         end
         vcat(initial_state_constraint, dynamics_constraints)
     end
-
+    equality_dimension = length(equality_constraints(zeros(primal_dimension), zeros(parameter_dimension)))
+   
     function inequality_constraints(z, θ)
         (; lb, ub) = control_bounds(dynamics)
         lb_mask = findall(!isinf, lb)
         ub_mask = findall(!isinf, ub)
-        (; us) = unflatten_trajectory(z, state_dimension, control_dimension)
-        mapreduce(vcat, us) do u
-            vcat(u[lb_mask] - lb[lb_mask], ub[ub_mask] - u[ub_mask])
-        end
-    end
-
-    prioritized_inequality_constraints = [
-        # most important: obstacle avoidance
-        function (z, θ)
-            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-            (; obstacle_position) = unflatten_parameters(θ)
-            mapreduce(vcat, 2:length(xs)) do k
-                sum((xs[k][1:2] - obstacle_position) .^ 2) - obstacle_radius^2
-            end
-        end,
-
-        # limit acceleration and don't go too fast, stay within the playing field
-        function (z, θ)
-            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+        (; xs, us) = unflatten_trajectory(z[1:primal_dimension], state_dimension, control_dimension)
+        vcat(
+            # control bounds
+            mapreduce(vcat, us) do u
+                vcat(u[lb_mask] - lb[lb_mask], ub[ub_mask] - u[ub_mask])
+            end,
+            # limit acceleration and don't go too fast, stay within the playing field
             mapreduce(vcat, 1:length(xs)) do k
                 px, py, v, θ = xs[k]
                 a, ω = us[k]
@@ -77,11 +66,23 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
                 position_constraints = vcat(px + 5.0, -px + 5.0, py + 5.0, -py + 5.0)
                 vcat(acceleration_constarint, velocity_constraint, position_constraints)
             end
+        )
+    end
+    inequality_dimension = length(inequality_constraints(zeros(primal_dimension), zeros(parameter_dimension)))
+
+    prioritized_preferences = [
+        # most important: obstacle avoidance
+        function (z, θ)
+            (; xs, us) = unflatten_trajectory(z[1:primal_dimension], state_dimension, control_dimension)
+            (; obstacle_position) = unflatten_parameters(θ)
+            mapreduce(vcat, 2:length(xs)) do k
+                sum((xs[k][1:2] - obstacle_position) .^ 2) - obstacle_radius^2
+            end
         end,
 
         # reach the goal
         function (z, θ)
-            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+            (; xs, us) = unflatten_trajectory(z[1:primal_dimension], state_dimension, control_dimension)
             (; goal_position) = unflatten_parameters(θ)
             goal_deviation = xs[end][1:2] .- goal_position
             [
@@ -91,27 +92,47 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
         end,
     ]
 
-    problem = ParametricOrderedPreferencesProblem(;
+    # Specify priortized constraint
+    is_prioritized_constraint = [true, true]
+
+    problem = ParametricOrderedPreferencesMPCC(; 
         objective,
         equality_constraints,
         inequality_constraints,
-        prioritized_inequality_constraints,
+        prioritized_preferences,
+        is_prioritized_constraint,
         primal_dimension,
         parameter_dimension,
+        equality_dimension,
+        inequality_dimension,
+        relaxation_mode,
     )
 
     (; problem, flatten_parameters, unflatten_parameters)
 end
 
-function demo(; paused = false, record = false, filename = "Single_agent.mp4")
+function demo(; verbose = false, paused = false, record = false, filename = "Single_agent_KKT.mp4")
+    # Algorithm setting 
+    ϵ = 10.0
+    κ = 0.6
+    max_iterations = 10
+    tolerance = 1e-7
+    relaxation_mode = :standard
+
     dynamics = UnicycleDynamics(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0]))
     obstacle_radius = 0.25
-    (; problem, flatten_parameters) = get_setup(; dynamics, obstacle_radius)
+    (; problem, flatten_parameters) = get_setup(; dynamics, obstacle_radius, relaxation_mode)
 
     warmstart_solution = nothing
 
+
     function get_receding_horizon_solution(θ; warmstart_solution)
-        solution = solve(problem, θ; warmstart_solution)
+        #solution = solve(problem, θ; warmstart_solution) 
+        (; relaxation, solution, residual) = 
+            solve_relaxed_pop(problem, warmstart_solution, θ; ϵ, κ, max_iterations, tolerance, verbose)
+        println("residual: ", residual)
+        println("relaxation: ", relaxation)
+
         trajectory =
             unflatten_trajectory(solution.primals, state_dim(dynamics), control_dim(dynamics))
         (; strategy = OpenLoopStrategy(trajectory.xs, trajectory.us), solution)

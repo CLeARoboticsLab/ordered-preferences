@@ -61,12 +61,14 @@ function demo(;verbose = false)
     tolerance = 1e-7
     relaxation_mode = :l_infinity
     println("relaxation_mode: ", relaxation_mode)
+    is_prioritized_constraint = [false, false]
 
     POP_prob = ParametricOrderedPreferencesMPCC(; # Stay parametrized by θ where θ(end) is the relaxation parameter
         objective,
         equality_constraints,
         inequality_constraints,
         prioritized_preferences,
+        is_prioritized_constraint,
         primal_dimension,
         parameter_dimension,
         equality_dimension,

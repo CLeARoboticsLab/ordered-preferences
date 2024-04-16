@@ -7,6 +7,10 @@ end
 """
 Synthesizes a parametric ordered preferences problem as an MPCC 
 (an optimization problem with single objective and KKT constraints resulting from inner levels)
+Inputs: 
+    ...
+Outputs: 
+    ...
 """
 
 function ParametricOrderedPreferencesMPCC(;
@@ -14,12 +18,13 @@ function ParametricOrderedPreferencesMPCC(;
     equality_constraints,
     inequality_constraints,
     prioritized_preferences,
+    is_prioritized_constraint, #TODO: Better way of reconciling between prioritized obj and constraints?
     primal_dimension,
     parameter_dimension,
     equality_dimension,
     inequality_dimension,
     relaxation_mode = :standard, 
-)
+) 
     # Problem data
     ordered_priority_levels = eachindex(prioritized_preferences)
 
@@ -32,15 +37,26 @@ function ParametricOrderedPreferencesMPCC(;
 
     inequality_dimension_ii = inequality_dimension
     equality_dimension_ii = equality_dimension
+    original_primal_dimension = primal_dimension
+    original_parameter_dimension = parameter_dimension
 
     # one extra parameter for relaxation
     augmented_parameter_dimension = parameter_dimension + 1 
 
-    function set_up_level(priority_level)
-        #TODO: Implement priority objective (for now) vs priority constraints 
-        primal_dimension_ii = primal_dimension + dual_dimension
+    dummy_primals = zeros(primal_dimension)
+    dummy_parameters = zeros(augmented_parameter_dimension)
 
-        priority_preferences_ii = prioritized_preferences[priority_level]
+    function set_up_level(priority_level)
+        # Implement prioritized objective vs prioritized constraints
+        if is_prioritized_constraint[priority_level]
+            prioritized_constraints_ii = prioritized_preferences[priority_level] # fᵢ(x,θ) ≥ 0 
+
+            slack_dimension_ii = length(prioritized_constraints_ii(dummy_primals, dummy_parameters))
+            primal_dimension = primal_dimension + slack_dimension_ii 
+            inequality_dimension_ii = inequality_dimension_ii + slack_dimension_ii
+        end
+        
+        primal_dimension_ii = primal_dimension + dual_dimension
 
         # Define symbolic variables for primals.
         total_dimension = primal_dimension_ii + inequality_dimension_ii + equality_dimension_ii
@@ -59,20 +75,40 @@ function ParametricOrderedPreferencesMPCC(;
         end
 
         # Build symbolic expression for objective and constraints. 
-        objective_ii = priority_preferences_ii(x, θ) 
-        
-        g_ii = mapreduce(vcat, inner_equality_constraints) do constraint
-                constraint(x,θ)
+        if is_prioritized_constraint[priority_level]
+
+            slacks_ii = last(x[1:primal_dimension], slack_dimension_ii)
+
+            # objective: minimize sum of squared slacks, min ∑sᵢ²
+            slack_objective = function (x,θ)
+                sum(last(x[1:primal_dimension], slack_dimension_ii) .^ 2)
             end
-        if isempty(g_ii)
-            g_ii = Symbolics.Num[]
+            objective_ii = slack_objective(x,θ)
+
+            # auxillary constraint: fᵢ(x,θ) + sᵢ ≥ 0 (sᵢ ≥ 0 is implicit)
+            auxillary_constraints = function(x,θ)
+                #original_x = x[1:original_primal_dimension]
+                #original_θ = θ[1:original_parameter_dimension]
+                prioritized_constraints_ii(x,θ) .+ slacks_ii
+            end
+            push!(inner_inequality_constraints, auxillary_constraints)
+        else
+            priority_objective_ii = prioritized_preferences[priority_level]
+            objective_ii = priority_objective_ii(x,θ) 
         end
 
         h_ii = mapreduce(vcat, inner_inequality_constraints) do constraint
-                constraint(x,θ)
-            end
+            constraint(x,θ)
+        end
         if isempty(h_ii)
             h_ii = Symbolics.Num[]
+        end
+
+        g_ii = mapreduce(vcat, inner_equality_constraints) do constraint
+            constraint(x,θ)
+        end
+        if isempty(g_ii)
+            g_ii = Symbolics.Num[]
         end
 
         # Lagrangian.
@@ -94,9 +130,8 @@ function ParametricOrderedPreferencesMPCC(;
 
         # Complementarity constraints from inequality constraints.
         complementarity = -h_ii .* λ
-  
+
         # Reduce relaxed (inner) complementarity_constraints into a single inequality and concatenate.
-        # Exact problem has no relaxation.
         if priority_level < last(ordered_priority_levels)
             for problem in (:relaxed, :exact)
                 if problem === :relaxed
@@ -104,6 +139,7 @@ function ParametricOrderedPreferencesMPCC(;
                     callable_complementarity = Symbolics.build_function(relaxed_complementarity, z̃, θ, expression=Val{false})
                     push!(inner_inequality_constraints, callable_complementarity)
                 else
+                    # Exact problem has no relaxation.
                     callable_complementarity = Symbolics.build_function(complementarity, z̃, θ, expression=Val{false})[1]
                     push!(inner_complementarity_constraints, callable_complementarity)
                 end
@@ -129,7 +165,6 @@ function ParametricOrderedPreferencesMPCC(;
     # Problem setting for final/outermost level 
     primal_dimension = primal_dimension + dual_dimension
     dummy_primals = zeros(primal_dimension)
-    dummy_parameters = zeros(augmented_parameter_dimension)
 
     equality_constraints = function(x,θ)
         mapreduce(vcat, inner_equality_constraints) do constraint
@@ -137,6 +172,7 @@ function ParametricOrderedPreferencesMPCC(;
         end
     end
     equality_dimension = length(equality_constraints(dummy_primals, dummy_parameters))
+    @assert equality_dimension == equality_dimension_ii
 
     inequality_constraints = function(x,θ)
         mapreduce(vcat, inner_inequality_constraints) do constraint
@@ -147,6 +183,7 @@ function ParametricOrderedPreferencesMPCC(;
         final_complementarity_constraint[1](x,θ)
     end
     inequality_dimension = length(inequality_constraints(dummy_primals, dummy_parameters)) + length(exact_final_complementarity(dummy_primals, dummy_parameters))
+    @assert inequality_dimension == inequality_dimension_ii 
 
     # Use the exact complementarity constraints to evaluate convergence
     exact_complementarity_constraints = function (x,θ)
