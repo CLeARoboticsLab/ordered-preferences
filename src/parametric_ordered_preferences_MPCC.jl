@@ -155,6 +155,8 @@ function ParametricOrderedPreferencesMPCC(;
         dual_dimension += inequality_dimension_ii + equality_dimension_ii
         inequality_dimension_ii += length(dual_nonnegativity) + length(relaxed_complementarity)
         equality_dimension_ii += length(stationarity)
+
+        # Main.@infiltrate
     end
 
     # Build KKT system for each priority level
@@ -262,7 +264,7 @@ function solve_relaxed_pop(
         # If the relaxed problem is infeasible, terminate. Otherwise solve the relaxed problem for xᵏ⁺¹
         ϵ = relaxations[ii]
         augmented_parameters = vcat(parameters, ϵ)
-        solution = solve(relaxed_problem, augmented_parameters; initial_guess)
+        solution = solve(relaxed_problem, augmented_parameters; initial_guess, verbose)
         if verbose
             println("ii: ", ii)
             println("status: ", solution.status)
@@ -278,14 +280,14 @@ function solve_relaxed_pop(
         complementarity_violations = exact_complementarity_constraints(solution.primals, augmented_parameters)
         complementarity_residual = findmax(-complementarity_violations)[1]
 
-        # Stop if iteration does not improve. Otherwise update initial_guess
-        if norm(initial_guess - solution.variables) < tolerance
-            verbose && printstyled("Converged at iteration $(ii).\n"; color = :green)
-            break
-        else
-            initial_guess = solution.variables 
-            push!(solutions, solution)
-        end
+        # #Stop if iteration does not improve. Otherwise update initial_guess
+        # if norm(initial_guess - solution.variables) < tolerance 
+        #     verbose && printstyled("Converged at iteration $(ii).\n"; color = :green)
+        #     break
+        # else
+        #     initial_guess = solution.variables 
+        #     push!(solutions, solution)
+        # end
 
         # Begin next iteration
         ϵ = κ * ϵ

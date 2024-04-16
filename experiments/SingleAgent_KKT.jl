@@ -114,9 +114,9 @@ end
 function demo(; verbose = false, paused = false, record = false, filename = "Single_agent_KKT.mp4")
     # Algorithm setting 
     ϵ = 10.0
-    κ = 0.6
-    max_iterations = 10
-    tolerance = 1e-7
+    κ = 0.92
+    max_iterations = 30
+    tolerance = 1e-6
     relaxation_mode = :standard
 
     dynamics = UnicycleDynamics(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0]))
@@ -134,13 +134,13 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sin
         println("relaxation: ", relaxation)
 
         trajectory =
-            unflatten_trajectory(solution.primals, state_dim(dynamics), control_dim(dynamics))
+            unflatten_trajectory(solution[end].primals, state_dim(dynamics), control_dim(dynamics))
         (; strategy = OpenLoopStrategy(trajectory.xs, trajectory.us), solution)
     end
 
-    initial_state = Observable(zeros(state_dim(dynamics)))
-    goal_position = Observable([0.5, 0.5])
-    obstacle_position = Observable([0.5, 0.4])
+    initial_state = Observable([-0.5, -0.5, 0.0, 0.0]) #zeros(state_dim(dynamics))
+    goal_position = Observable([0.5, 0.5]) 
+    obstacle_position = Observable([0.2, 0.2]) # [0.2, 0.2] or [0.5, 0.4]
 
     θ = GLMakie.@lift flatten_parameters(;
         initial_state = $initial_state,
