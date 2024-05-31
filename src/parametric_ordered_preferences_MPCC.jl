@@ -77,19 +77,19 @@ function ParametricOrderedPreferencesMPCC(;
         # Build symbolic expression for objective and constraints. 
         if is_prioritized_constraint[priority_level]
 
-            slacks_ii = last(x[1:primal_dimension], slack_dimension_ii)
+            slacks_ii = last(x, slack_dimension_ii)
 
             # objective: minimize sum of squared slacks, min ∑sᵢ²
             slack_objective = function (x,θ)
-                sum(last(x[1:primal_dimension], slack_dimension_ii) .^ 2)
+                sum(last(x, slack_dimension_ii) .^ 2)
             end
             objective_ii = slack_objective(x,θ)
 
             # auxillary constraint: fᵢ(x,θ) + sᵢ ≥ 0 (sᵢ ≥ 0 is implicit)
             auxillary_constraints = function(x,θ)
-                #original_x = x[1:original_primal_dimension]
-                #original_θ = θ[1:original_parameter_dimension]
-                prioritized_constraints_ii(x,θ) .+ slacks_ii
+                original_x = x[1:original_primal_dimension]
+                original_θ = θ[1:original_parameter_dimension]
+                prioritized_constraints_ii(original_x, original_θ) .+ slacks_ii
             end
             push!(inner_inequality_constraints, auxillary_constraints)
         else
@@ -151,7 +151,7 @@ function ParametricOrderedPreferencesMPCC(;
             final_complementarity = Symbolics.build_function(relaxed_complementarity, z̃, θ, expression=Val{false})[1]
             push!(final_complementarity_constraint, final_complementarity)
         end
-        
+
         # Update dual dimension, inequality and equality dimension for the next level. 
         dual_dimension += inequality_dimension_ii + equality_dimension_ii
         inequality_dimension_ii += length(dual_nonnegativity) + length(relaxed_complementarity)
@@ -261,6 +261,7 @@ function solve_relaxed_pop(
     end
 
     complementarity_residual = 1.0
+    converged_tolerance = 1e-20
 
     relaxations = ϵ * κ.^(0:max_iterations) # [1.0, 0.1, 0.01, ... 1e-10]
     ii = 1 
@@ -284,15 +285,16 @@ function solve_relaxed_pop(
         complementarity_violations = exact_complementarity_constraints(solution.primals, augmented_parameters)
         complementarity_residual = findmax(-complementarity_violations)[1]
 
-        #Stop if iteration does not improve. Otherwise update initial_guess
-        if norm(initial_guess - solution.variables) < tolerance 
-            verbose && printstyled("Converged at iteration $(ii).\n"; color = :green)
-            break
-        else
-            initial_guess = solution.variables 
-            push!(solutions, solution)
-        end
+        # # Stop if iteration does not improve. 
+        # if norm(initial_guess - solution.variables) < converged_tolerance 
+        #     verbose && printstyled("Converged at iteration $(ii).\n"; color = :green)
+        #     break
+        # end
 
+        # Update initial_guess
+        initial_guess = solution.variables 
+        push!(solutions, solution)
+        
         # Begin next iteration
         ϵ = κ * ϵ
         ii += 1

@@ -151,6 +151,7 @@ include("../experiments/SimpleLinearExample.jl")
                 0.5*x[1:3]'Q*x[1:3] + q'x[1:3]
             end,
         ]
+        is_prioritized_constraint = [true, false]
 
         # Problem setting 
         primal_dimension = 3
@@ -168,7 +169,6 @@ include("../experiments/SimpleLinearExample.jl")
         tolerance = 1e-6
         relaxation_mode = :standard
         println("relaxation_mode: ", relaxation_mode)
-        is_prioritized_constraint = [true, false]
 
         POP_prob = ParametricOrderedPreferencesMPCC(; # Stay parametrized by θ where θ(end) is the relaxation parameter
             objective,
