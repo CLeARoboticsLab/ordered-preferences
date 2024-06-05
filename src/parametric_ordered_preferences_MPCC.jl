@@ -46,17 +46,24 @@ function ParametricOrderedPreferencesMPCC(;
     dummy_primals = zeros(primal_dimension)
     dummy_parameters = zeros(augmented_parameter_dimension)
 
-    function set_up_level(priority_level)
+    function set_up_level(priority_level)        
         # Implement prioritized objective vs prioritized constraints
         if is_prioritized_constraint[priority_level]
-            prioritized_constraints_ii = prioritized_preferences[priority_level] # fᵢ(x,θ) ≥ 0 
+
+            # Main.@infiltrate
+
+            prioritized_constraints_ii = prioritized_preferences[priority_level] # fᵢ(x,θ) ≥ 0
 
             slack_dimension_ii = length(prioritized_constraints_ii(dummy_primals, dummy_parameters))
             primal_dimension = primal_dimension + slack_dimension_ii
             inequality_dimension_ii = inequality_dimension_ii + slack_dimension_ii
         end
         
+        # Main.@infiltrate
+
         primal_dimension_ii = primal_dimension + dual_dimension
+
+        # Main.@infiltrate
 
         # Define symbolic variables for primals.
         total_dimension = primal_dimension_ii + inequality_dimension_ii + equality_dimension_ii
@@ -73,6 +80,8 @@ function ParametricOrderedPreferencesMPCC(;
         if isempty(θ)
             θ = Symbolics.Num[]
         end
+
+        # Main.@infiltrate
 
         # Build symbolic expression for objective and constraints. 
         if is_prioritized_constraint[priority_level]
@@ -111,11 +120,13 @@ function ParametricOrderedPreferencesMPCC(;
             g_ii = Symbolics.Num[]
         end
 
+        # Main.@infiltrate
+
         # Lagrangian.
-        L = objective_ii - λ' * h_ii + μ' * g_ii 
+        L = objective_ii - λ' * h_ii - μ' * g_ii
 
         # Stationary constraints (# ∇ₓL = 0).
-        stationarity = Symbolics.gradient(L, x) 
+        stationarity = Symbolics.gradient(L, x)
 
         # Concatenate stationary constraint into equality constraints.
         callable_stationarity = Symbolics.build_function(stationarity, z̃, θ,  expression=Val{false})[1]
@@ -152,20 +163,30 @@ function ParametricOrderedPreferencesMPCC(;
             push!(final_complementarity_constraint, final_complementarity)
         end
 
+        # Main.@infiltrate
+
         # Update dual dimension, inequality and equality dimension for the next level. 
         dual_dimension += inequality_dimension_ii + equality_dimension_ii
         inequality_dimension_ii += length(dual_nonnegativity) + length(relaxed_complementarity)
         equality_dimension_ii += length(stationarity)
+
+        # Main.@infiltrate
     end
 
     # Build KKT system for each priority level
     for priority_level in ordered_priority_levels
         set_up_level(priority_level)
     end
-    
+
+    # Main.@infiltrate
+
     # Problem setting for final/outermost level 
     primal_dimension = primal_dimension + dual_dimension
     dummy_primals = zeros(primal_dimension)
+
+    exact_final_complementarity = function (x,θ)
+        final_complementarity_constraint[1](x,θ)
+    end
 
     equality_constraints = function(x,θ)
         mapreduce(vcat, inner_equality_constraints) do constraint
@@ -190,7 +211,7 @@ function ParametricOrderedPreferencesMPCC(;
     if !isempty(inner_complementarity_constraints)
         exact_complementarity_constraints = function (x,θ)
         [
-            exact_final_complementarity(x,θ); 
+            exact_final_complementarity(x,θ);
             mapreduce(vcat, inner_complementarity_constraints) do constraint
                 constraint(x,θ)
             end
@@ -201,12 +222,14 @@ function ParametricOrderedPreferencesMPCC(;
         exact_complementarity_constraints = function (x,θ) exact_final_complementarity(x,θ) end
     end
 
+    # Main.@infiltrate
+
     if relaxation_mode === :standard
         objective_ϵ = objective
 
         combined_inequality_constraints = function (x,θ) 
             [
-                inequality_constraints(x,θ); 
+                inequality_constraints(x,θ);
                 exact_final_complementarity(x,θ) .+ θ[augmented_parameter_dimension]
             ]
         end
@@ -214,12 +237,12 @@ function ParametricOrderedPreferencesMPCC(;
     elseif relaxation_mode === :l_infinity
         primal_dimension = primal_dimension + 1
 
-        objective_ϵ = function (x,θ)  
+        objective_ϵ = function (x,θ)
             objective(x,θ) + x[primal_dimension] ./ θ[augmented_parameter_dimension]
         end
         combined_inequality_constraints = function (x,θ)
             [
-                inequality_constraints(x,θ); 
+                inequality_constraints(x,θ);
                 exact_final_complementarity(x,θ) .+ x[primal_dimension]
             ]
         end
@@ -229,7 +252,7 @@ function ParametricOrderedPreferencesMPCC(;
     end
     
     relaxed_problem = ParametricOptimizationProblem(;
-        objective = objective_ϵ, 
+        objective = objective_ϵ,
         equality_constraint = equality_constraints,
         inequality_constraint = combined_inequality_constraints,
         parameter_dimension = augmented_parameter_dimension,
@@ -273,7 +296,10 @@ function solve_relaxed_pop(
         if verbose
             println("ii: ", ii)
             println("status: ", solution.status)
-            println("primals: ", solution.primals)
+            println("innermost slack: ", solution.primals[49])
+            #println("intermediate slacks: ", solution.primals[57])
+            println("solution (time_step 1,2): ", solution.primals[1:12])
+            println("solution (time_step 7,8): ", solution.primals[37:48])
             println("objective: ", original_objective(solution.primals, augmented_parameters)) 
         end
 
@@ -284,26 +310,24 @@ function solve_relaxed_pop(
         # Check complementarity residual
         complementarity_violations = exact_complementarity_constraints(solution.primals, augmented_parameters)
         complementarity_residual = findmax(-complementarity_violations)[1]
-
-        # # Stop if iteration does not improve. 
-        # if norm(initial_guess - solution.variables) < converged_tolerance 
-        #     verbose && printstyled("Converged at iteration $(ii).\n"; color = :green)
-        #     break
-        # end
+        # Stop if iteration does not improve after 7 iterations
+        if ii > 7 && norm(initial_guess - solution.variables) < converged_tolerance
+            verbose && printstyled("Converged at iteration $(ii).\n"; color = :green)
+            break
+        end
 
         # Update initial_guess
         initial_guess = solution.variables 
         push!(solutions, solution)
-        
+
         # Begin next iteration
-        ϵ = κ * ϵ
         ii += 1
     end
 
     verbose && if complementarity_residual < tolerance
         printstyled("Found a solution with complementarity residual less than tol=$(tolerance).\n"; color = :blue)
     end
-
+    # Main.@infiltrate
     verbose && println("complementarity_residual: ", complementarity_residual)
     (; relaxation = ϵ, solution = solutions, residual = complementarity_residual) #TODO solutions[end]
 end 

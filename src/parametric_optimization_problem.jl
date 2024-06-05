@@ -80,7 +80,6 @@ function ParametricOptimizationProblem(;
     if isempty(h)
         h = Symbolics.Num[]
     end
-
     # Build Lagrangian.
     L = f - λ' * g - μ' * h
 

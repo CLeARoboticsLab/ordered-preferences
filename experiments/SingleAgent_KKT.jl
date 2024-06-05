@@ -51,27 +51,27 @@ function get_setup(; dynamics = UnicycleDynamics, planning_horizon = 20, obstacl
         vcat(
             # control bounds
             mapreduce(vcat, us) do u
-                vcat(u[lb_mask] - lb[lb_mask], ub[ub_mask] - u[ub_mask])
+                 vcat(u[lb_mask] - lb[lb_mask], ub[ub_mask] - u[ub_mask])
             end,
-            # # limit acceleration and don't go too fast, stay within the playing field (for planar_double_integrator)
-            # mapreduce(vcat, 1:length(xs)) do k
-            #     px, py, vx, vy = xs[k]
-            #     position_constraints = vcat(px + 1.0, -px + 1.0, py + 1.0, -py + 1.0)
-            #     vcat(position_constraints)
-            # end
-                    # limit acceleration and don't go too fast, stay within the playing field
+            # limit acceleration and don't go too fast, stay within the playing field (for planar_double_integrator)
             mapreduce(vcat, 1:length(xs)) do k
-                px, py, v, θ = xs[k]
-                a, ω = us[k]
-
-                lateral_acceleration = v * ω
-                longitudinal_acceleration = a
-                acceleration_constarint =
-                    0.5 - (lateral_acceleration^2 + longitudinal_acceleration^2)
-                velocity_constraint = vcat(v + 1.0, -v + 1.0)
+                px, py, vx, vy = xs[k]
                 position_constraints = vcat(px + 1.0, -px + 1.0, py + 1.0, -py + 1.0)
-                vcat(acceleration_constarint, velocity_constraint, position_constraints)
+                vcat(position_constraints)
             end
+            # limit acceleration and don't go too fast, stay within the playing field
+            # mapreduce(vcat, 1:length(xs)) do k
+            #     px, py, v, θ = xs[k]
+            #     a, ω = us[k]
+
+            #     lateral_acceleration = v * ω
+            #     longitudinal_acceleration = a
+            #     acceleration_constarint =
+            #         0.5 - (lateral_acceleration^2 + longitudinal_acceleration^2)
+            #     velocity_constraint = vcat(v + 1.0, -v + 1.0)
+            #     position_constraints = vcat(px + 1.0, -px + 1.0, py + 1.0, -py + 1.0)
+            #     vcat(acceleration_constarint, velocity_constraint, position_constraints)
+            # end
         )
     end
     inequality_dimension = length(inequality_constraints(zeros(primal_dimension), zeros(parameter_dimension)))
@@ -87,27 +87,47 @@ function get_setup(; dynamics = UnicycleDynamics, planning_horizon = 20, obstacl
         #     end
         # end,
 
+        # # simplified 
+        # function (z, θ)
+        #     (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+        #     # p_x ≥ 0.0
+        #     mapreduce(vcat, 2:length(xs)) do k
+        #         xs[k][1]
+        #     end
+        # end,
+        
+        # simplified with p_y[end] ≤ 0.0
+        function (z, θ)
+            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+            -xs[end][2]
+        end,
+
+        # simplified with p_x[end] ≥ 0.0
+        function (z, θ)
+            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+            xs[end][1]
+        end,
+
+        # # reach the goal. Instead, try: -sum((xs[end][1:2] - goal_position) .^ 2) + 0.01^2 (not prioritized constraint)
+        # function (z, θ)
+        #     (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+        #     (; goal_position) = unflatten_parameters(θ)
+        #     goal_deviation = xs[end][1:2] .- goal_position
+        #     [
+        #         goal_deviation .+ 0.01
+        #         -goal_deviation .+ 0.01
+        #     ]
+        #     # -sum((xs[end][1:2] - goal_position) .^ 2)
+        # end,
+
         # simplified 
         function (z, θ)
             (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-            (; obstacle_position) = unflatten_parameters(θ)
             # p_y ≤ 0.0
             mapreduce(vcat, 2:length(xs)) do k
                 -xs[k][2]
             end
         end,
-        
-        # reach the goal. Instead, try: -sum((xs[end][1:2] - goal_position) .^ 2) + 0.01^2
-        function (z, θ)
-            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-            (; goal_position) = unflatten_parameters(θ)
-            goal_deviation = xs[end][1:2] .- goal_position
-            [
-                goal_deviation .+ 0.01
-                -goal_deviation .+ 0.01
-            ]
-        end,
-
     ]
 
     # Specify priortized constraint
@@ -133,13 +153,13 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sin
     # Algorithm setting
     ϵ = 1.0
     κ = 0.1
-    max_iterations = 15
-    tolerance = 1e-6
+    max_iterations = 16
+    tolerance = 1e-3
     relaxation_mode = :standard
 
-    dynamics = UnicycleDynamics(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0])) 
-    # dynamics = planar_double_integrator(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0])) # x := (px, py, vx, vy) and u := (ax, ay).
-    planning_horizon = 2
+    # dynamics = UnicycleDynamics(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0])) 
+    dynamics = planar_double_integrator(; control_bounds = (; lb = 10*[-1.0, -1.0], ub = 10*[1.0, 1.0])) # x := (px, py, vx, vy) and u := (ax, ay).
+    planning_horizon = 8
     obstacle_radius = 0.25
     (; problem, flatten_parameters) = get_setup(; dynamics, planning_horizon, obstacle_radius, relaxation_mode)
 
@@ -149,19 +169,24 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sin
 
     function get_receding_horizon_solution(θ; warmstart_solution)
         #solution = solve(problem, θ; warmstart_solution)
+
+        # Main.@infiltrate
+
         (; relaxation, solution, residual) =
             solve_relaxed_pop(problem, warmstart_solution, θ; ϵ, κ, max_iterations, tolerance, verbose)
         println("residual: ", residual)
         println("relaxation: ", relaxation)
+
+        # Main.@infiltrate
 
         trajectory =
             unflatten_trajectory(solution[end].primals[1:primal_dimension], state_dim(dynamics), control_dim(dynamics))
         (; strategy = OpenLoopStrategy(trajectory.xs, trajectory.us), solution)
     end
 
-    initial_state = Observable([-0.5, -0.5, 0.0, 0.0]) #zeros(state_dim(dynamics))
-    goal_position = Observable([0.5, 0.5])
-    obstacle_position = Observable([1.0, -1.0]) # [0.2, 0.2] or [0.5, 0.4]
+    initial_state = Observable([-0.3, 0.1, 0.0, 0.0]) #zeros(state_dim(dynamics))
+    goal_position = Observable([-0.2, 0.1])
+    obstacle_position = Observable([0.0, 0.0]) # [0.2, 0.2] or [0.5, 0.4]
 
     θ = GLMakie.@lift flatten_parameters(;
         initial_state = $initial_state,
@@ -169,7 +194,7 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sin
         obstacle_position = $obstacle_position,
     )
 
-    Main.@infiltrate
+    # Main.@infltrate
 
     strategy = GLMakie.@lift let
         result = get_receding_horizon_solution($θ; warmstart_solution)
@@ -177,7 +202,7 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sin
         result.strategy
     end
 
-    Main.@infiltrate
+    # Main.@infiltrate
 
     figure = GLMakie.Figure()
     axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-1, 1), (-1, 1)))
