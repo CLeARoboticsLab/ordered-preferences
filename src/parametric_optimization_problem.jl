@@ -82,7 +82,7 @@ function ParametricOptimizationProblem(;
     end
     # Build Lagrangian.
     L = f - λ' * g - μ' * h
-
+    # Main.@infiltrate
     # Build F = [∇ₓL, g, h]'.
     ∇ₓL = Symbolics.gradient(L, x)
     F = Vector{Symbolics.Num}([∇ₓL; g; h])

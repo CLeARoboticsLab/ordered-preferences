@@ -5,6 +5,7 @@ using LinearAlgebra
 using ParametricMCPs: ParametricMCPs, ParametricMCP
 using Symbolics: Symbolics
 using BlockArrays: BlockArrays, BlockArray, Block
+using DelimitedFiles: readdlm
 
 include("parametric_optimization_problem.jl")
 export ParametricOptimizationProblem, solve, total_dim

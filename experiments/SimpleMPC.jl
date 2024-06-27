@@ -1,6 +1,6 @@
 module SimpleMPC
 
-using TrajectoryGamesExamples: UnicycleDynamics
+using TrajectoryGamesExamples: UnicycleDynamics, planar_double_integrator
 using TrajectoryGamesBase:
     OpenLoopStrategy, unflatten_trajectory, state_dim, control_dim, control_bounds
 using GLMakie: GLMakie, Observable
@@ -46,48 +46,61 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
         (; lb, ub) = control_bounds(dynamics)
         lb_mask = findall(!isinf, lb)
         ub_mask = findall(!isinf, ub)
-        (; us) = unflatten_trajectory(z, state_dimension, control_dimension)
-        mapreduce(vcat, us) do u
-            vcat(u[lb_mask] - lb[lb_mask], ub[ub_mask] - u[ub_mask])
-        end
+        (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+        vcat(
+            mapreduce(vcat, us) do u
+                vcat(u[lb_mask] - lb[lb_mask], ub[ub_mask] - u[ub_mask])
+            end,
+            mapreduce(vcat, 1:length(xs)) do k
+                px, py, vx, vy = xs[k]
+                position_constraints = vcat(px + 1.0, -px + 1.0, py + 1.0, -py + 1.0)
+                vcat(position_constraints)
+            end
+        )
     end
 
     prioritized_inequality_constraints = [
-        # most important: obstacle avoidance
+        # # most important: obstacle avoidance
+        # function (z, θ)
+        #     (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+        #     (; obstacle_position) = unflatten_parameters(θ)
+        #     mapreduce(vcat, 2:length(xs)) do k
+        #         sum((xs[k][1:2] - obstacle_position) .^ 2) - obstacle_radius^2
+        #     end
+        # end,
+
+        # # limit acceleration and don't go too fast, stay within the playing field
+        # function (z, θ)
+        #     (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+        #     mapreduce(vcat, 1:length(xs)) do k
+        #         px, py, v, θ = xs[k]
+        #         a, ω = us[k]
+
+        #         lateral_acceleration = v * ω
+        #         longitudinal_acceleration = a
+        #         acceleration_constarint =
+        #             0.5 - (lateral_acceleration^2 + longitudinal_acceleration^2)
+        #         velocity_constraint = vcat(v + 1.0, -v + 1.0)
+        #         position_constraints = vcat(px + 5.0, -px + 5.0, py + 5.0, -py + 5.0)
+        #         vcat(acceleration_constarint, velocity_constraint, position_constraints)
+        #     end
+        # end,
+
+        # # reach the goal
+        # function (z, θ)
+        #     (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+        #     (; goal_position) = unflatten_parameters(θ)
+        #     goal_deviation = xs[end][1:2] .- goal_position
+        #     [
+        #         goal_deviation .+ 0.01
+        #         -goal_deviation .+ 0.01
+        #     ]
+        # end,
+
+        # simplified with p_y[end] ≤ 0.0
         function (z, θ)
             (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-            (; obstacle_position) = unflatten_parameters(θ)
-            mapreduce(vcat, 2:length(xs)) do k
-                sum((xs[k][1:2] - obstacle_position) .^ 2) - obstacle_radius^2
-            end
-        end,
-
-        # limit acceleration and don't go too fast, stay within the playing field
-        function (z, θ)
-            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-            mapreduce(vcat, 1:length(xs)) do k
-                px, py, v, θ = xs[k]
-                a, ω = us[k]
-
-                lateral_acceleration = v * ω
-                longitudinal_acceleration = a
-                acceleration_constarint =
-                    0.5 - (lateral_acceleration^2 + longitudinal_acceleration^2)
-                velocity_constraint = vcat(v + 1.0, -v + 1.0)
-                position_constraints = vcat(px + 5.0, -px + 5.0, py + 5.0, -py + 5.0)
-                vcat(acceleration_constarint, velocity_constraint, position_constraints)
-            end
-        end,
-
-        # reach the goal
-        function (z, θ)
-            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-            (; goal_position) = unflatten_parameters(θ)
-            goal_deviation = xs[end][1:2] .- goal_position
-            [
-                goal_deviation .+ 0.01
-                -goal_deviation .+ 0.01
-            ]
+            -xs[end][2]
         end,
     ]
 
@@ -104,9 +117,11 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
 end
 
 function demo(; paused = false)
-    dynamics = UnicycleDynamics(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0]))
+    # dynamics = UnicycleDynamics(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0]))
+    dynamics = planar_double_integrator(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0]))
     obstacle_radius = 0.25
-    (; problem, flatten_parameters) = get_setup(; dynamics, obstacle_radius)
+    planning_horizon = 10
+    (; problem, flatten_parameters) = get_setup(; dynamics, planning_horizon, obstacle_radius)
 
     warmstart_solution = nothing
 
@@ -117,8 +132,8 @@ function demo(; paused = false)
         (; strategy = OpenLoopStrategy(trajectory.xs, trajectory.us), solution)
     end
 
-    initial_state = Observable(zeros(state_dim(dynamics)))
-    goal_position = Observable([0.5, 0.5])
+    initial_state = Observable([-0.3, 1.0, 0.0, 0.0]) #Observable(zeros(state_dim(dynamics)))
+    goal_position = Observable([-0.2, 0.1]) #Observable([0.5, 0.5])
     obstacle_position = Observable([-0.5, 0.0])
 
     θ = GLMakie.@lift flatten_parameters(;
@@ -131,6 +146,7 @@ function demo(; paused = false)
         result = get_receding_horizon_solution($θ; warmstart_solution)
         warmstart_solution = result.solution
         result.strategy
+        Main.@infiltrate
     end
 
     figure = GLMakie.Figure()
@@ -211,6 +227,7 @@ function demo(; paused = false)
     while !is_stopped[]
         compute_time = @elapsed if !is_paused[]
             initial_state[] = strategy[].xs[begin + 1]
+            # Main.@infiltrate
         end
         sleep(max(0.0, 0.1 - compute_time))
     end

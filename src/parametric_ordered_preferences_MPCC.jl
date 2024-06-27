@@ -282,7 +282,8 @@ function solve_relaxed_pop(
     if isnothing(initial_guess)
         initial_guess = zeros(total_dim(relaxed_problem))
     end
-
+    initial_guess[1:60] = vec(readdlm("sequential_soln.txt"))
+    # Main.@infiltrate
     complementarity_residual = 1.0
     converged_tolerance = 1e-20
 
@@ -296,10 +297,11 @@ function solve_relaxed_pop(
         if verbose
             println("ii: ", ii)
             println("status: ", solution.status)
-            println("innermost slack: ", solution.primals[49])
+            println("innermost slack: ", solution.primals[61])
             #println("intermediate slacks: ", solution.primals[57])
             println("solution (time_step 1,2): ", solution.primals[1:12])
-            println("solution (time_step 7,8): ", solution.primals[37:48])
+            # println("solution (time_step 7,8): ", solution.primals[37:48])
+            println("solution (time_step 9,10): ", solution.primals[49:60])
             println("objective: ", original_objective(solution.primals, augmented_parameters)) 
         end
 
@@ -317,7 +319,10 @@ function solve_relaxed_pop(
         end
 
         # Update initial_guess
-        initial_guess = solution.variables 
+        initial_guess = solution.variables
+        initial_guess = zeros(total_dim(relaxed_problem))
+        # Main.@infiltrate
+        initial_guess[1:60] = vec(readdlm("sequential_soln.txt"))
         push!(solutions, solution)
 
         # Begin next iteration
