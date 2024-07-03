@@ -285,7 +285,7 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sin
         display(figure)
         while !is_stopped[]
             compute_time = @elapsed if !is_paused[]
-                Main.@infiltrate
+                # Main.@infiltrate
                 initial_state[] =  strategy[].xs[begin + 1]
             end
             sleep(max(0.0, 0.1 - compute_time))
