@@ -82,7 +82,6 @@ function ParametricOptimizationProblem(;
     end
     # Build Lagrangian.
     L = f - λ' * g - μ' * h
-    # Main.@infiltrate
     # Build F = [∇ₓL, g, h]'.
     ∇ₓL = Symbolics.gradient(L, x)
     F = Vector{Symbolics.Num}([∇ₓL; g; h])
@@ -135,9 +134,17 @@ function solve(
         problem.parametric_mcp,
         parameter_value;
         initial_guess = z0,
-        verbose,
-        cumulative_iteration_limit = 100000,
+        verbose = true,
+        cumulative_iteration_limit = 150000,
+        major_iteration_limit = 1000,
+        minor_iteration_limit = 3000,
+        convergence_tolerance = 1e-3, #1e-6
         proximal_perturbation = 1e-2,
+        nms_initial_reference_factor = 21500, #20
+        nms_maximum_watchdogs = 2000, #5
+        nms_memory_size = 4000, #10
+        nms_mstep_frequency = 100, #10
+        restart_limit = 20,
         use_basics = true,
         use_start = true,
     )

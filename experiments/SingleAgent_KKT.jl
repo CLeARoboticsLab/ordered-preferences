@@ -82,14 +82,14 @@ function get_setup(; dynamics = UnicycleDynamics, planning_horizon = 20, obstacl
 
     prioritized_preferences = [
 
-        # # most important: obstacle avoidance
-        # function (z, θ)
-        #     (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-        #     (; obstacle_position) = unflatten_parameters(θ)
-        #     mapreduce(vcat, 2:length(xs)) do k
-        #         sum((xs[k][1:2] - obstacle_position) .^ 2) - obstacle_radius^2
-        #     end
-        # end,
+        # most important: obstacle avoidance
+        function (z, θ)
+            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+            (; obstacle_position) = unflatten_parameters(θ)
+            mapreduce(vcat, 2:length(xs)) do k
+                sum((xs[k][1:2] - obstacle_position) .^ 2) - obstacle_radius^2
+            end
+        end,
 
         # # simplified 
         # function (z, θ)
@@ -155,7 +155,7 @@ end
 
 function demo(; verbose = false, paused = false, record = false, filename = "Single_agent_KKT.mp4")
     # Algorithm setting
-    ϵ = 1.0
+    ϵ = 1.1
     κ = 0.1
     max_iterations = 16
     tolerance = 1e-3
@@ -173,25 +173,19 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sin
     primal_dimension = dynamics_dimension * planning_horizon
 
     function get_receding_horizon_solution(θ; warmstart_solution)
-        #solution = solve(problem, θ; warmstart_solution)
-
-        # Main.@infiltrate
-
         (; relaxation, solution, residual) =
             solve_relaxed_pop(problem, warmstart_solution, θ; ϵ, κ, max_iterations, tolerance, verbose)
         println("residual: ", residual)
         println("relaxation: ", relaxation)
-
-        # Main.@infiltrate
 
         trajectory =
             unflatten_trajectory(solution[end].primals[1:primal_dimension], state_dim(dynamics), control_dim(dynamics))
         (; strategy = OpenLoopStrategy(trajectory.xs, trajectory.us), solution)
     end
 
-    initial_state = Observable([-0.3, 1.0, 0.0, 0.0]) #zeros(state_dim(dynamics))
+    initial_state = Observable([-1.0, 1.0, 1.0, 0.0]) #zeros(state_dim(dynamics))
     goal_position = Observable([-0.2, 0.1])
-    obstacle_position = Observable([0.0, 0.0]) # [0.2, 0.2] or [0.5, 0.4]
+    obstacle_position = Observable([0.25, 0.0])
 
     θ = GLMakie.@lift flatten_parameters(;
         initial_state = $initial_state,
@@ -199,18 +193,13 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sin
         obstacle_position = $obstacle_position,
     )
 
-    # Main.@infltrate
-
     strategy = GLMakie.@lift let
         result = get_receding_horizon_solution($θ; warmstart_solution)
         warmstart_solution = result.solution[end].variables
-        # Shift warmstart_solution by 1 time step 
-        warmstart_solution = vcat(warmstart_solution[dynamics_dimension + 1:dynamics_dimension*2], warmstart_solution[dynamics_dimension + 1:end]) 
-        # Main.@infiltrate
+        # Shift warmstart_solution by 1 time step
+        warmstart_solution = vcat(warmstart_solution[dynamics_dimension + 1:end], zeros(dynamics_dimension)) 
         result.strategy
     end
-
-    # Main.@infiltrate
 
     figure = GLMakie.Figure()
     axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-1, 1), (-1, 1)))
@@ -296,7 +285,7 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sin
         display(figure)
         while !is_stopped[]
             compute_time = @elapsed if !is_paused[]
-                # Main.@infiltrate
+                Main.@infiltrate
                 initial_state[] =  strategy[].xs[begin + 1]
             end
             sleep(max(0.0, 0.1 - compute_time))

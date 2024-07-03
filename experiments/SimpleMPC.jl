@@ -60,14 +60,14 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
     end
 
     prioritized_inequality_constraints = [
-        # # most important: obstacle avoidance
-        # function (z, θ)
-        #     (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-        #     (; obstacle_position) = unflatten_parameters(θ)
-        #     mapreduce(vcat, 2:length(xs)) do k
-        #         sum((xs[k][1:2] - obstacle_position) .^ 2) - obstacle_radius^2
-        #     end
-        # end,
+        # most important: obstacle avoidance
+        function (z, θ)
+            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+            (; obstacle_position) = unflatten_parameters(θ)
+            mapreduce(vcat, 2:length(xs)) do k
+                sum((xs[k][1:2] - obstacle_position) .^ 2) - obstacle_radius^2
+            end
+        end,
 
         # # limit acceleration and don't go too fast, stay within the playing field
         # function (z, θ)
@@ -117,8 +117,8 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
 end
 
 function demo(; paused = false)
-    # dynamics = UnicycleDynamics(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0]))
-    dynamics = planar_double_integrator(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0]))
+    # dynamics = UnicycleDynamics(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0])) # x := (px, py, v, θ) and u := (a, ω).
+    dynamics = planar_double_integrator(; control_bounds = (; lb = [-1.0, -1.0], ub = [1.0, 1.0])) # x := (px, py, vx, vy) and u := (ax, ay).
     obstacle_radius = 0.25
     planning_horizon = 10
     (; problem, flatten_parameters) = get_setup(; dynamics, planning_horizon, obstacle_radius)
@@ -132,9 +132,9 @@ function demo(; paused = false)
         (; strategy = OpenLoopStrategy(trajectory.xs, trajectory.us), solution)
     end
 
-    initial_state = Observable([-0.3, 1.0, 0.0, 0.0]) #Observable(zeros(state_dim(dynamics)))
+    initial_state = Observable([-1.0, 1.0, 1.0, 0.0]) #Observable(zeros(state_dim(dynamics)))
     goal_position = Observable([-0.2, 0.1]) #Observable([0.5, 0.5])
-    obstacle_position = Observable([-0.5, 0.0])
+    obstacle_position = Observable([0.25, 0.0])
 
     θ = GLMakie.@lift flatten_parameters(;
         initial_state = $initial_state,
@@ -146,9 +146,8 @@ function demo(; paused = false)
         result = get_receding_horizon_solution($θ; warmstart_solution)
         warmstart_solution = result.solution
         result.strategy
-        Main.@infiltrate
     end
-
+    
     figure = GLMakie.Figure()
     axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-1, 1), (-1, 1)))
 
@@ -226,8 +225,9 @@ function demo(; paused = false)
 
     while !is_stopped[]
         compute_time = @elapsed if !is_paused[]
+            Main.@infiltrate
+            sum(sum(u .^ 2) for u in strategy[].us)
             initial_state[] = strategy[].xs[begin + 1]
-            # Main.@infiltrate
         end
         sleep(max(0.0, 0.1 - compute_time))
     end
