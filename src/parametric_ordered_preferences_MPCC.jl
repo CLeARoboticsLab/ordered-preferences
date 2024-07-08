@@ -325,7 +325,7 @@ function solve_relaxed_pop(
         initial_guess = zeros(total_dim(relaxed_problem))
         # initial_guess[1:60] = solution.variables[1:60]
         initial_guess[1:original_primal_dimension] = solution.variables[1:original_primal_dimension]
-        Main.@infiltrate
+        # Main.@infiltrate
         push!(solutions, solution)
 
         # Begin next iteration

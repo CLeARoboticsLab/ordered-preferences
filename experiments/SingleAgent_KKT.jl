@@ -195,14 +195,12 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sin
 
     strategy = GLMakie.@lift let
         result = get_receding_horizon_solution($θ; warmstart_solution)
-        warmstart_solution = result.solution[end].variables
-        # Shift warmstart_solution by 1 time step
-        Main.@infiltrate
-        # warmstart_solution = vcat(warmstart_solution[dynamics_dimension + 1:end], zeros(dynamics_dimension))
-        warmstart_solution[1:primal_dimension] = vcat(
-            warmstart_solution[dynamics_dimension + 1:primal_dimension], 
-            warmstart_solution[primal_dimension-dynamics_dimension + 1:primal_dimension]
-        )
+        # # Shift warmstart_solution by 1 time step
+        # # warmstart_solution = vcat(warmstart_solution[dynamics_dimension + 1:end], zeros(dynamics_dimension))
+        # warmstart_solution[1:primal_dimension] = vcat(
+        #     warmstart_solution[dynamics_dimension + 1:primal_dimension], 
+        #     warmstart_solution[primal_dimension-dynamics_dimension + 1:primal_dimension]
+        # )
         warmstart_solution = nothing
         result.strategy
     end
@@ -291,7 +289,7 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sin
         display(figure)
         while !is_stopped[]
             compute_time = @elapsed if !is_paused[]
-                Main.@infiltrate
+                # Main.@infiltrate
                 initial_state[] =  strategy[].xs[begin + 1]
             end
             sleep(max(0.0, 0.1 - compute_time))
