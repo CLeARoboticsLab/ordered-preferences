@@ -135,15 +135,17 @@ function solve(
         parameter_value;
         initial_guess = z0,
         verbose = true,
-        cumulative_iteration_limit = 150000,
+        gradient_step_limit = 20,
+        cumulative_iteration_limit = 300000,
         major_iteration_limit = 1000,
         minor_iteration_limit = 3000,
-        convergence_tolerance = 1e-3, #1e-6
+        convergence_tolerance = 6e-2, #1e-6
         proximal_perturbation = 1e-2,
-        nms_initial_reference_factor = 21500, #20
-        nms_maximum_watchdogs = 2000, #5
-        nms_memory_size = 4000, #10
-        nms_mstep_frequency = 100, #10
+        nms_initial_reference_factor = 25000, #20
+        nms_maximum_watchdogs = 5000, #5
+        nms_memory_size = 10000, #10
+        nms_mstep_frequency = 200, #10
+        lemke_start_type = "advanced",
         restart_limit = 20,
         use_basics = true,
         use_start = true,

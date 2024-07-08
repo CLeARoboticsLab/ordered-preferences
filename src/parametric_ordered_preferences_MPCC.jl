@@ -1,7 +1,8 @@
-struct ParametricOrderedPreferencesMPCC{T1<:ParametricOptimizationProblem, T2, T3}
+struct ParametricOrderedPreferencesMPCC{T1<:ParametricOptimizationProblem, T2, T3, T4}
     relaxed_problem::T1
     exact_complementarity_constraints::T2
     objective::T3
+    original_primal_dimension::T4
 end
 
 """
@@ -49,14 +50,13 @@ function ParametricOrderedPreferencesMPCC(;
     function set_up_level(priority_level)        
         # Implement prioritized objective vs prioritized constraints
         if is_prioritized_constraint[priority_level]
-
-            # Main.@infiltrate
-
             prioritized_constraints_ii = prioritized_preferences[priority_level] # fᵢ(x,θ) ≥ 0
-
             slack_dimension_ii = length(prioritized_constraints_ii(dummy_primals, dummy_parameters))
-            primal_dimension = primal_dimension + slack_dimension_ii
-            inequality_dimension_ii = inequality_dimension_ii + slack_dimension_ii
+            primal_dimension += slack_dimension_ii
+            inequality_dimension_ii += slack_dimension_ii
+            if priority_level == first(ordered_priority_levels)
+                equality_dimension_ii += slack_dimension_ii # sᵢ = 0 for most important constraint
+            end
         end
         
         # Main.@infiltrate
@@ -94,13 +94,19 @@ function ParametricOrderedPreferencesMPCC(;
             end
             objective_ii = slack_objective(x,θ)
 
-            # auxillary constraint: fᵢ(x,θ) + sᵢ ≥ 0 (sᵢ ≥ 0 is implicit)
+            # auxillary constraint: fᵢ(x,θ) + sᵢ ≥ 0 (sᵢ ≥ 0 is implicit) # 추가? most priority constraint slack=0?
             auxillary_constraints = function(x,θ)
                 original_x = x[1:original_primal_dimension]
                 original_θ = θ[1:original_parameter_dimension]
                 prioritized_constraints_ii(original_x, original_θ) .+ slacks_ii
             end
             push!(inner_inequality_constraints, auxillary_constraints)
+
+            # Most priority constraint slack, sᵢ = 0
+            if priority_level == first(ordered_priority_levels)
+                push!(inner_equality_constraints, function(x,θ) slacks_ii end)
+            end
+
         else
             priority_objective_ii = prioritized_preferences[priority_level]
             objective_ii = priority_objective_ii(x,θ)
@@ -260,7 +266,7 @@ function ParametricOrderedPreferencesMPCC(;
         equality_dimension,
         inequality_dimension,
     )    
-    ParametricOrderedPreferencesMPCC(relaxed_problem, exact_complementarity_constraints, objective)
+    ParametricOrderedPreferencesMPCC(relaxed_problem, exact_complementarity_constraints, objective, original_primal_dimension)
 end
 
 function solve_relaxed_pop(
@@ -278,13 +284,11 @@ function solve_relaxed_pop(
     relaxed_problem = problem.relaxed_problem
     exact_complementarity_constraints = problem.exact_complementarity_constraints
     original_objective = problem.objective
-    primal_dimension = relaxed_problem.primal_dimension
+    original_primal_dimension = problem.original_primal_dimension
 
     if isnothing(initial_guess)
         initial_guess = zeros(total_dim(relaxed_problem))
     end
-    #initial_guess[1:60] = vec(readdlm("sequential_soln.txt"))
-    # Main.@infiltrate
     complementarity_residual = 1.0
     converged_tolerance = 1e-20
 
@@ -318,11 +322,10 @@ function solve_relaxed_pop(
         end
 
         # Update initial_guess
-        # initial_guess = solution.variables
         initial_guess = zeros(total_dim(relaxed_problem))
-        initial_guess[1:60] = solution.variables[1:60]
-        # Main.@infiltrate
-        # initial_guess[1:60] = vec(readdlm("sequential_soln.txt"))
+        # initial_guess[1:60] = solution.variables[1:60]
+        initial_guess[1:original_primal_dimension] = solution.variables[1:original_primal_dimension]
+        Main.@infiltrate
         push!(solutions, solution)
 
         # Begin next iteration
@@ -332,7 +335,7 @@ function solve_relaxed_pop(
     verbose && if complementarity_residual < tolerance
         printstyled("Found a solution with complementarity residual less than tol=$(tolerance).\n"; color = :blue)
     end
-    # Main.@infiltrate
+
     verbose && println("complementarity_residual: ", complementarity_residual)
     (; relaxation = ϵ, solution = solutions, residual = complementarity_residual) #TODO solutions[end]
 end 

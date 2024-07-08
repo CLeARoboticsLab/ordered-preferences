@@ -100,7 +100,7 @@ function get_setup(; dynamics = UnicycleDynamics(), planning_horizon = 20, obsta
         # simplified with p_y[end] ≤ 0.0
         function (z, θ)
             (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-            -xs[end][2]
+            xs[end][2]
         end,
     ]
 
@@ -132,7 +132,7 @@ function demo(; paused = false)
         (; strategy = OpenLoopStrategy(trajectory.xs, trajectory.us), solution)
     end
 
-    initial_state = Observable([-1.0, 1.0, 1.0, 0.0]) #Observable(zeros(state_dim(dynamics)))
+    initial_state = Observable([-1.0, 0.0, 1.0, 0.0]) #Observable(zeros(state_dim(dynamics)))
     goal_position = Observable([-0.2, 0.1]) #Observable([0.5, 0.5])
     obstacle_position = Observable([0.25, 0.0])
 
