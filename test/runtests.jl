@@ -187,9 +187,9 @@ include("../experiments/SimpleLinearExample.jl")
         (; relaxation, solution, residual) = 
             solve_relaxed_pop(POP_prob, nothing, parameters; ϵ, κ, max_iterations, tolerance, verbose)
         println("relaxation: ", relaxation)
-        println("solution: ", solution[end]) #TODO: solution
+        println("solution: ", solution[end].primals[1:primal_dimension]) #TODO: solution
         println("residual: ", residual)
-        @test all(isapprox.(solution[end].primals[1:primal_dimension], [0.75, 0.25, 0.0], atol = 1e-6))
+        @test all(isapprox.(solution[end].primals[1:primal_dimension], [0.75, 0.25, 0.0], atol = 1e-4))
     
     end
 

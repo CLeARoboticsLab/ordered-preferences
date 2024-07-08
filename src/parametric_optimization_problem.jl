@@ -134,7 +134,7 @@ function solve(
         problem.parametric_mcp,
         parameter_value;
         initial_guess = z0,
-        verbose = true,
+        verbose = verbose,
         gradient_step_limit = 20,
         cumulative_iteration_limit = 300000,
         major_iteration_limit = 1000,
