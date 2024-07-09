@@ -100,11 +100,11 @@ function get_setup(; dynamics = UnicycleDynamics, planning_horizon = 20, obstacl
         #     end
         # end,
         
-        # simplified with p_y[end] ≤ 0.0
-        function (z, θ)
-            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-            -xs[end][2]
-        end,
+        # # simplified with p_y[end] ≤ 0.0
+        # function (z, θ)
+        #     (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+        #     -xs[end][2]
+        # end,
 
         # # simplified with p_x[end] ≥ 0.0
         # function (z, θ)
@@ -112,17 +112,17 @@ function get_setup(; dynamics = UnicycleDynamics, planning_horizon = 20, obstacl
         #     xs[end][1]
         # end,
 
-        # # reach the goal. Instead, try: -sum((xs[end][1:2] - goal_position) .^ 2) + 0.01^2 (not prioritized constraint)
-        # function (z, θ)
-        #     (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
-        #     (; goal_position) = unflatten_parameters(θ)
-        #     goal_deviation = xs[end][1:2] .- goal_position
-        #     [
-        #         goal_deviation .+ 0.01
-        #         -goal_deviation .+ 0.01
-        #     ]
-        #     # -sum((xs[end][1:2] - goal_position) .^ 2)
-        # end,
+        # reach the goal.
+        function (z, θ)
+            (; xs, us) = unflatten_trajectory(z, state_dimension, control_dimension)
+            (; goal_position) = unflatten_parameters(θ)
+            goal_deviation = xs[end][1:2] .- goal_position
+            [
+                goal_deviation .+ 0.01
+                -goal_deviation .+ 0.01
+            ]
+            # -sum((xs[end][1:2] - goal_position) .^ 2)
+        end,
 
         # # simplified 
         # function (z, θ)
@@ -183,8 +183,8 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sin
         (; strategy = OpenLoopStrategy(trajectory.xs, trajectory.us), solution)
     end
 
-    initial_state = Observable([-1.0, 1.0, 1.0, 0.0]) #zeros(state_dim(dynamics))
-    goal_position = Observable([-0.2, 0.1])
+    initial_state = Observable([-0.6, 0.6, -0.2, 0.5]) #zeros(state_dim(dynamics))
+    goal_position = Observable([0.3, 0.0])
     obstacle_position = Observable([0.25, 0.0])
 
     θ = GLMakie.@lift flatten_parameters(;
@@ -281,7 +281,7 @@ function demo(; verbose = false, paused = false, record = false, filename = "Sin
     if record # record the simulation
         # Record for 7 seconds at a rate of 10 fps
         framerate = 10
-        frames = 1:framerate * 7
+        frames = 1:framerate * 4
         GLMakie.record(figure, filename, frames; framerate = framerate) do t
             initial_state[] =  strategy[].xs[begin + 1]
         end

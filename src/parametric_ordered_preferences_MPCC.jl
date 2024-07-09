@@ -293,18 +293,18 @@ function solve_relaxed_pop(
     converged_tolerance = 1e-20
 
     relaxations = ϵ * κ.^(0:max_iterations) # [1.0, 0.1, 0.01, ... 1e-10]
-    ii = 1 
+    ii = 1
     while complementarity_residual > tolerance && ii ≤ max_iterations + 1
         # If the relaxed problem is infeasible, terminate. Otherwise solve the relaxed problem for xᵏ⁺¹
         ϵ = relaxations[ii]
         augmented_parameters = vcat(parameters, ϵ)
-        solution = solve(relaxed_problem, augmented_parameters; initial_guess)
+        solution = solve(relaxed_problem, augmented_parameters; initial_guess, verbose)
         if verbose
             println("ii: ", ii)
             println("status: ", solution.status)
             # println("innermost slack: ", solution.primals[61])
-            # println("solution (time_step 1,2): ", solution.primals[1:12])
-            # println("solution (time_step 9,10): ", solution.primals[49:60])
+            println("solution (time_step 1,2): ", solution.primals[1:12])
+            println("solution (time_step 9,10): ", solution.primals[49:60])
             println("objective: ", original_objective(solution.primals, augmented_parameters)) 
         end
 
@@ -330,6 +330,7 @@ function solve_relaxed_pop(
 
         # Begin next iteration
         ii += 1
+        # Main.@infiltrate
     end
 
     verbose && if complementarity_residual < tolerance
