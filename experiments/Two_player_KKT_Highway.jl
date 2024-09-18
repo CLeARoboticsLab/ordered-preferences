@@ -1,4 +1,4 @@
-module Two_player_KKT
+module Two_player_KKT_Highway
 
 using TrajectoryGamesExamples: UnicycleDynamics, planar_double_integrator
 using TrajectoryGamesBase:
@@ -76,10 +76,8 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
         for _ in 1:num_players
     ]
     inequality_dimensions = [length(inequality_constraints[i](dummy_primals, dummy_parameters)) for i in 1:num_players]
-
-    prioritized_preferences = [
-        [
-            # # most important: obstacle avoidance
+   
+    # # most important: obstacle avoidance
             # function (z, θ)
             #     (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
             #     (; obstacle_position) = unflatten_parameters(θ[Block(i)])
@@ -88,22 +86,26 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
             #     end
             # end,
 
+    prioritized_preferences = [
+        [
+            # # Maximize horizontal speed
+            # function (z, θ)
+            #     (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
+            #     h_speed = mapreduce(vcat, 1:length(xs)) do k
+            #         px, py, vx, vy = xs[k]
+            #         vx
+            #     end
+            #     -sum(h_speed)
+            # end
+
             # reach the goal.
             function (z, θ)
                 (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
-                (; goal_position) = unflatten_parameters(θ[Block(i)])
-                goal_deviation = xs[end][1:2] .- goal_position
-                # [ #L1
-                #     goal_deviation .+ 0.01
-                #     -goal_deviation .+ 0.01
-                # ]
-                # [ #L2
-                #     sum(goal_deviation .^ 2)
-                # ]
+                (; goal_position) = unflatten_parameters(θ[Block(1)]) # Player 1 θ[Block(i)]
                 xs[end][1] - goal_position[1] # px[end] ≥ 0.9
             end,
 
-            # Speed limit for player 2
+            # Speed limit
             function (z,θ)
                 (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
                 mapreduce(vcat, 1:length(xs)) do k
@@ -111,13 +113,30 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
                     velocity_constraints = vcat(vx + 0.1, -vx + 0.1, vy + 0.1, -vy + 0.1)
                     vcat(velocity_constraints)
                 end
-            end
+            end,
+        ],
+        [
+            # Speed limit
+            function (z,θ)
+                (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
+                mapreduce(vcat, 1:length(xs)) do k
+                    px, py, vx, vy = xs[k]
+                    velocity_constraints = vcat(vx + 0.1, -vx + 0.1, vy + 0.1, -vy + 0.1)
+                    vcat(velocity_constraints)
+                end
+            end,
 
+            # reach the goal.
+            function (z, θ)
+                (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
+                (; goal_position) = unflatten_parameters(θ[Block(2)]) # Player 2
+                xs[end][1] - goal_position[1] # px[end] ≥ 0.9
+            end,
         ]
-        for i in 1:num_players
+        # for i in 1:num_players
     ]
 
-    # Specify priortized constraint
+    # Specify prioritized constraint
     is_prioritized_constraint = [[true, true], [true, true]]
 
     # Shared constraints
@@ -157,14 +176,14 @@ function demo(; verbose = false, paused = false, record = false, filename = "Two
     # Algorithm setting
     ϵ = 1.1
     κ = 0.1
-    max_iterations = 12
-    tolerance = 5e-2
+    max_iterations = 10
+    tolerance = 7e-2
     relaxation_mode = :standard
 
     # dynamics = UnicycleDynamics(; control_bounds = (; lb = 10*[-1.0, -1.0], ub = 10*[1.0, 1.0])) # x := (px, py, v, θ) and u := (a, ω). Need to give initial velocity
     num_players = 2
-    dynamics = planar_double_integrator(; control_bounds = (; lb = [-5.0, -5.0], ub = [5.0, 5.0])) # x := (px, py, vx, vy) and u := (ax, ay).
-    planning_horizon = 5
+    dynamics = planar_double_integrator(; control_bounds = (; lb = [-2.0, -2.0], ub = [2.0, 2.0])) # x := (px, py, vx, vy) and u := (ax, ay).
+    planning_horizon = 10
     obstacle_radius = 0.25
     collision_avoidance = 0.2
 
@@ -193,8 +212,8 @@ function demo(; verbose = false, paused = false, record = false, filename = "Two
     obstacle_position = Observable([0.25, 0.15])
 
     # Player 1
-    initial_state1 = Observable([-0.8, 0.0, 0.5, 0.0])
-    goal_position1 = Observable([0.9, 0.0]) # [0.8137, -0.05]
+    initial_state1 = Observable([-0.8, 0.0, 0.6, 0.0])
+    goal_position1 = Observable([0.9, 0.0])
     θ1 = GLMakie.@lift flatten_parameters(; # θ is a flat (column) vector of parameters
         initial_state = $initial_state1,
         goal_position = $goal_position1,
@@ -202,8 +221,8 @@ function demo(; verbose = false, paused = false, record = false, filename = "Two
     )
 
     # Player 2
-    initial_state2 = Observable([-0.3, 0.0, 0.1, 0.0])
-    goal_position2 = Observable([0.9, 0.0]) # [-0.7241, 0.0306]
+    initial_state2 = Observable([-0.55, 0.0, 0.1, 0.0])
+    goal_position2 = Observable([0.9, 0.0])
     θ2 = GLMakie.@lift flatten_parameters(; 
         initial_state = $initial_state2,
         goal_position = $goal_position2,
@@ -259,6 +278,10 @@ function demo(; verbose = false, paused = false, record = false, filename = "Two
     #     color = (:red, 0.5),
     # )
 
+    # Visualize highway lanes
+    GLMakie.lines!(axis, [(-1, 0.1), (1, 0.1)], color = :black)
+    GLMakie.lines!(axis, [(-1, -0.1), (1, -0.1)], color = :black)
+
     # visualize goal positions
     GLMakie.scatter!(
         axis,
@@ -279,11 +302,13 @@ function demo(; verbose = false, paused = false, record = false, filename = "Two
     # Visualize trajectories
     strategy1 = GLMakie.@lift OpenLoopStrategy($strategy[1].xs, $strategy[1].us)
     strategy2 = GLMakie.@lift OpenLoopStrategy($strategy[2].xs, $strategy[2].us)
-    GLMakie.plot!(axis, strategy1)
-    GLMakie.plot!(axis, strategy2)
+    GLMakie.plot!(axis, strategy1, color = :blue)
+    GLMakie.plot!(axis, strategy2, color = :red)
 
     # Store speed data for Highway
     speed_data = Vector{Float64}[]
+    openloop_speed_data = Vector{Vector{Float64}}[]
+    openloop_distance = Vector{Float64}[]
 
     total_time = 12 # seconds
     if record # record the simulation
@@ -292,24 +317,40 @@ function demo(; verbose = false, paused = false, record = false, filename = "Two
         frames = 1:framerate * total_time
         GLMakie.record(figure, filename, frames; framerate = framerate) do t
             println("Check collision w/ each other: ",
-                    [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][2].xs[k][1:2]) .^ 2)) for k in 2:planning_horizon])
-            
+                    [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+
             # Store speed data
             push!(speed_data, [strategy[][1].xs[1][3], strategy[][2].xs[1][3]])
 
+            # Store openloop speed data
+            push!(openloop_speed_data, [vcat(strategy[][1].xs...)[3:4:end], vcat(strategy[][2].xs...)[3:4:end]])
+
+            # Store openloop distance data
+            push!(openloop_distance, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+
             θ1.val[1:state_dim(dynamics)] = first(strategy[]).xs[begin + 1]
             initial_state2[] = strategy[][2].xs[begin + 1]
+
+            # if length(speed_data) == 20
+            #     Main.@infiltrate
+            # end
 
         end
     else
         display(figure)
         while !is_stopped[]
             compute_time = @elapsed if !is_paused[]
-                println("Check collision w/ each other: ",
-                    [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][2].xs[k][1:2]) .^ 2)) for k in 2:planning_horizon])
+                println("Check collision w/ each other (2): ",
+                    [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
 
                 # Store speed data
                 push!(speed_data, [strategy[][1].xs[1][3], strategy[][2].xs[1][3]])
+
+                # Store openloop speed data
+                push!(openloop_speed_data, [vcat(strategy[][1].xs...)[3:4:end], vcat(strategy[][2].xs...)[3:4:end]])
+
+                # Store openloop distance data
+                push!(openloop_distance, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
 
                 Main.@infiltrate
 
@@ -323,13 +364,49 @@ function demo(; verbose = false, paused = false, record = false, filename = "Two
         figure
     end
 
-    # For visualization
+    Main.@infiltrate
+
+    # For visualization of receding horizon
     fig = CairoMakie.Figure()
-    ax = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "horizontal speed")
-    CairoMakie.scatterlines!(ax, 0:length(speed_data)-1, [v[1] for v in speed_data], color = :blue)
-    CairoMakie.scatterlines!(ax, 0:length(speed_data)-1, [v[2] for v in speed_data], color = :red)
-    CairoMakie.lines!(ax, 0:length(speed_data)-1, [0.1 for _ in 0:length(speed_data)-1], color = :black, linestyle = :dash)
+    ax1 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "horizontal speed", title = "Receding Horizon")
+    CairoMakie.scatterlines!(ax1, 0:length(speed_data)-1, [v[1] for v in speed_data], color = :blue)
+    CairoMakie.scatterlines!(ax1, 0:length(speed_data)-1, [v[2] for v in speed_data], color = :red)
+    CairoMakie.lines!(ax1, 0:length(speed_data)-1, [0.1 for _ in 0:length(speed_data)-1], color = :black, linestyle = :dash)
+    fig
+    CairoMakie.save("$filename"[1:end-4] * "_Receding_Horizon" * ".png", fig)
+
+    # Visualize open-loop trajectory (speed)
+    T = 1
+
+    fig = CairoMakie.Figure()
+    ax2 = CairoMakie.Axis(fig[1, 1]; limits = (nothing, (nothing, 0.7)), xlabel = "time step", ylabel = "speed", title = "Open loop speed at T = $T")
+    CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, openloop_speed_data[T][1], color = :blue)
+    CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, openloop_speed_data[T][2], color = :red)
+    CairoMakie.lines!(ax2, 0:planning_horizon-1, [0.1 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+    # Visualize open-loop trajectory (distance) , limits = (nothing, (collision_avoidance-0.05, 0.4))
+    ax3 = CairoMakie.Axis(fig[1, 2]; limits = (nothing, (collision_avoidance-0.05, 0.4)), xlabel = "time step", ylabel = "distance", title = "Open loop distance at T = $T")
+    CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, openloop_distance[T], color = :black)
+    CairoMakie.lines!(ax3, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+
+    CairoMakie.save("$filename"[1:end-4] * "_Open_Loop" * ".png", fig)
     fig
 end
 
 end
+
+
+# if verbose
+#     println("ii: ", ii)
+#     println("status: ", solution.status)
+#     # TODO: Automate 30
+#     solution_primals = [solution.primals[i][1:30] for i in 1:length(problem.objectives)]
+#     trajectory_primals = BlockArray(vcat(solution_primals...), [30, 30])
+#     #println("P1 objective : ", problem.objectives[1](trajectory_primals, augmented_parameters))
+#     #println("P2 objective : ", problem.objectives[2](trajectory_primals, augmented_parameters))
+#     println("P1 trajectory: ", trajectory_primals[Block(1)])
+#     println("P2 trajectory: ", trajectory_primals[Block(2)])
+#     println("P2 velocity: ", trajectory_primals[Block(2)][3:6:end])
+#     println("P1 slack at level 1: ", solution.primals[1][31])
+#     println("P2 slack at level 1: ", solution.primals[2][31])
+#     # println("P2 slack at level 2: ", solution.primals[2][94:113])
+# end

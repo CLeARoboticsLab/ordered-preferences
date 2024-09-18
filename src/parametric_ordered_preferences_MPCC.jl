@@ -303,9 +303,9 @@ function solve_relaxed_pop(
             println("ii: ", ii)
             println("status: ", solution.status)
             # println("innermost slack: ", solution.primals[61])
-            println("solution (time_step 1,2): ", solution.primals[1:12])
-            println("solution (time_step 9,10): ", solution.primals[49:60])
-            println("objective: ", original_objective(solution.primals, augmented_parameters)) 
+            # println("solution (time_step 1,2): ", solution.primals[1:12])
+            # println("solution (time_step 9,10): ", solution.primals[49:60])
+            # println("objective: ", original_objective(solution.primals, augmented_parameters)) 
         end
 
         if string(solution.status) != "MCP_Solved" 
