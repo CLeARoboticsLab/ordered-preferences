@@ -1,4 +1,4 @@
-module N_player_KKT_Highway
+module N_player_KKT_Highway_Baseline
 
 using TrajectoryGamesExamples: UnicycleDynamics, planar_double_integrator
 using TrajectoryGamesBase:
@@ -9,7 +9,7 @@ using BlockArrays
 
 using OrderedPreferences
 
-function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 20, obstacle_radius = 0.25,  collision_avoidance = 0.2, relaxation_mode = :standard)
+function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 20, collision_avoidance = 0.2)
     state_dimension = state_dim(dynamics)
     control_dimension = control_dim(dynamics)
     primals_per_agent = (state_dimension + control_dimension) * planning_horizon
@@ -33,13 +33,13 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
 
     objectives = [
         function (z, θ)
-            (; xs, us) = unflatten_trajectory(z[Block(i)], state_dimension, control_dimension)
+            (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
             sum(sum(u .^ 2) for u in us)
         end
-        for i in 1:num_players
+        for _ in 1:num_players
     ]
 
-    equality_constraints = [ # private: z[Block(1)] are original private primals
+    equality_constraints = [ # Unlike before, z[Block(i)] are (original) private primals
         function (z, θ)
             (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
             (; initial_state) = unflatten_parameters(θ[Block(i)])
@@ -51,7 +51,6 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
         end
         for i in 1:num_players
     ] 
-    equality_dimensions = [length(equality_constraints[i](dummy_primals, dummy_parameters)) for i in 1:num_players]
 
     inequality_constraints = [
         function (z, θ)
@@ -75,7 +74,6 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
         end
         for _ in 1:num_players
     ]
-    inequality_dimensions = [length(inequality_constraints[i](dummy_primals, dummy_parameters)) for i in 1:num_players]
 
     prioritized_preferences = [
         [
@@ -91,7 +89,7 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
                 (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
                 mapreduce(vcat, 1:length(xs)) do k
                     px, py, vx, vy = xs[k]
-                    velocity_constraints = vcat(vx + 0.2, -vx + 0.2, vy + 0.2, -vy + 0.2)
+                    velocity_constraints = vcat(vx + 0.1, -vx + 0.1, vy + 0.1, -vy + 0.1)
                     vcat(velocity_constraints)
                 end
             end,
@@ -102,7 +100,7 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
                 (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
                 mapreduce(vcat, 1:length(xs)) do k
                     px, py, vx, vy = xs[k]
-                    velocity_constraints = vcat(vx + 0.2, -vx + 0.2, vy + 0.2, -vy + 0.2)
+                    velocity_constraints = vcat(vx + 0.1, -vx + 0.1, vy + 0.1, -vy + 0.1)
                     vcat(velocity_constraints)
                 end
             end,
@@ -120,7 +118,7 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
                 (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
                 mapreduce(vcat, 1:length(xs)) do k
                     px, py, vx, vy = xs[k]
-                    velocity_constraints = vcat(vx + 0.2, -vx + 0.2, vy + 0.2, -vy + 0.2)
+                    velocity_constraints = vcat(vx + 0.1, -vx + 0.1, vy + 0.1, -vy + 0.1)
                     vcat(velocity_constraints)
                 end
             end,
@@ -137,6 +135,13 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
     # Specify prioritized constraint
     is_prioritized_constraint = [[true, true], [true, true], [true, true]]
 
+    # Specify penalty factors [innermost level, second level]
+    penalty_factors = [
+        [1000.0, 10.0],
+        [1000.0, 10.0],
+        [1000.0, 10.0]
+    ]
+
     # Shared constraints
     function shared_equality_constraints(z, θ)
         [0]
@@ -148,13 +153,16 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
         @assert length(xs) == num_players
         # Avoid collision between 3 players
         mapreduce(vcat, 2:length(xs[1])) do k
-            sum((xs[1][k][1:2] - xs[2][k][1:2]) .^ 2) - collision_avoidance^2
-            sum((xs[1][k][1:2] - xs[3][k][1:2]) .^ 2) - collision_avoidance^2
-            sum((xs[2][k][1:2] - xs[3][k][1:2]) .^ 2) - collision_avoidance^2
+            [sum((xs[1][k][1:2] - xs[2][k][1:2]) .^ 2) - collision_avoidance^2;
+            sum((xs[1][k][1:2] - xs[3][k][1:2]) .^ 2) - collision_avoidance^2;
+            sum((xs[2][k][1:2] - xs[3][k][1:2]) .^ 2) - collision_avoidance^2]
         end
     end
 
-    problem = ParametricOrderedPreferencesMPCCGame(;
+    shared_equality_dimension = length(shared_equality_constraints(dummy_primals, dummy_parameters))
+    shared_inequality_dimension = length(shared_inequality_constraints(dummy_primals, dummy_parameters))
+
+    problem = ParametricGamePenalty(;
         objectives,
         equality_constraints,
         inequality_constraints,
@@ -164,30 +172,23 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
         shared_inequality_constraints,
         primal_dimensions,
         parameter_dimensions,
-        equality_dimensions,
-        inequality_dimensions,
-        relaxation_mode,
+        shared_equality_dimension,
+        shared_inequality_dimension,
+        penalty_factors
     )
 
     (; problem, flatten_parameters, unflatten_parameters)
 end
 
-function demo(; verbose = false, paused = false, record = false, filename = "Two_player_KKT_v12.mp4")
-    # Algorithm setting
-    ϵ = 1.1
-    κ = 0.1
-    max_iterations = 10
-    tolerance = 5e-2
-    relaxation_mode = :standard
-
-    # dynamics = UnicycleDynamics(; control_bounds = (; lb = 10*[-1.0, -1.0], ub = 10*[1.0, 1.0])) # x := (px, py, v, θ) and u := (a, ω). Need to give initial velocity
+function demo(; verbose = false, paused = false, filename = "N_player_KKT_baseline.mp4")
     num_players = 3
     dynamics = planar_double_integrator(; control_bounds = (; lb = [-2.0, -2.0], ub = [2.0, 2.0])) # x := (px, py, vx, vy) and u := (ax, ay).
-    planning_horizon = 5
-    obstacle_radius = 0.25
+    planning_horizon = 10
     collision_avoidance = 0.2
 
-    (; problem, flatten_parameters) = get_setup(num_players; dynamics, planning_horizon, obstacle_radius, collision_avoidance, relaxation_mode)
+    (; problem, flatten_parameters) = get_setup(num_players; dynamics, planning_horizon, collision_avoidance)
+
+    # Main.@infiltrate
 
     warmstart_solution = nothing
 
@@ -195,16 +196,21 @@ function demo(; verbose = false, paused = false, record = false, filename = "Two
     primal_dimension = dynamics_dimension * planning_horizon
 
     function get_receding_horizon_solution(θ; warmstart_solution)
-        (; relaxation, solution, residual) =
-            solve_relaxed_pop_game(problem, warmstart_solution, θ; ϵ, κ, max_iterations, tolerance, verbose)
-        # Choose the solution with best complementarity residual
-        min_residual_idx = argmin(residual)
-        println("residual: ", residual[min_residual_idx])
-        println("relaxation: ", relaxation[min_residual_idx])
-        
+        solution = solve_penalty(problem, θ; initial_guess = warmstart_solution, verbose, return_primals = true)
         strategies = mapreduce(vcat, 1:num_players) do i
-            unflatten_trajectory(solution[min_residual_idx].primals[i][1:primal_dimension], state_dim(dynamics), control_dim(dynamics))
+            unflatten_trajectory(solution.primals[i][1:primal_dimension], state_dim(dynamics), control_dim(dynamics))
         end
+        # Save primal solution as text file
+        open("solution_primals.txt", "w") do file
+            for vec in solution.primals
+                write(file, join(vec, ",") * "\n")
+            end
+        end
+        # For later. 
+        # sample_solution = open("solution_primals.txt") do file
+        #    [parse.(Float64, split(line, ",")) for line in readlines(file)]
+        # end
+
         (; strategies, solution)
     end
 
@@ -221,18 +227,18 @@ function demo(; verbose = false, paused = false, record = false, filename = "Two
     )
 
     # Player 2
-    initial_state2 = Observable([0.1, 0.0, 0.2, 0.0])
+    initial_state2 = Observable([0.0, 0.0, 0.1, 0.0])
     goal_position2 = Observable([0.9, 0.0])
-    θ2 = GLMakie.@lift flatten_parameters(; 
+    θ2 = GLMakie.@lift flatten_parameters(;
         initial_state = $initial_state2,
         goal_position = $goal_position2,
         obstacle_position = $obstacle_position,
     )
 
     # Player 3
-    initial_state3 = Observable([0.3, 0.0, 0.2, 0.0])
+    initial_state3 = Observable([0.1, 0.0, 0.1, 0.0])
     goal_position3 = Observable([0.9, 0.0])
-    θ3 = GLMakie.@lift flatten_parameters(; 
+    θ3 = GLMakie.@lift flatten_parameters(;
         initial_state = $initial_state3,
         goal_position = $goal_position3,
         obstacle_position = $obstacle_position,
@@ -244,18 +250,17 @@ function demo(; verbose = false, paused = false, record = false, filename = "Two
     println("Player 2's goal_position:", goal_position2)
     println("Player 3's goal_position:", goal_position3)
 
-    # Main.@infiltrate
-
     strategy = GLMakie.@lift let
         result = get_receding_horizon_solution($θ; warmstart_solution)
         warmstart_solution = nothing
+
         result.strategies
     end
 
     # Main.@infiltrate
 
     figure = GLMakie.Figure()
-    axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-1, 1), (-1, 1)))
+    axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-1, 1), (-0.2, 0.2)))
 
     # pause and stop buttons
     figure[2, 1] = buttongrid = GLMakie.GridLayout(tellwidth = false)
@@ -278,15 +283,6 @@ function demo(; verbose = false, paused = false, record = false, filename = "Two
         markersize = 20,
         color = [:blue, :red, :green],
     )
-
-    # # visualize obstacle position
-    # GLMakie.scatter!(
-    #     axis,
-    #     GLMakie.@lift(GLMakie.Point2f($obstacle_position)),
-    #     markersize = 2 * obstacle_radius * sqrt(2), # sqrt2 compensating for GLMakie bug
-    #     markerspace = :data,
-    #     color = (:red, 0.5),
-    # )
 
     # Visualize highway lanes
     GLMakie.lines!(axis, [(-1, 0.2), (1, 0.2)], color = :black)
@@ -312,89 +308,32 @@ function demo(; verbose = false, paused = false, record = false, filename = "Two
     GLMakie.plot!(axis, strategy3, color = :green)
 
     # Store speed data for Highway
-    speed_data = Vector{Float64}[]
     openloop_speed_data = Vector{Vector{Float64}}[]
     openloop_distance1 = Vector{Float64}[]
     openloop_distance2 = Vector{Float64}[]
     openloop_distance3 = Vector{Float64}[]
 
-    total_time = 12 # seconds
-    if record # record the simulation
-        # Record for 7 seconds at a rate of 10 fps
-        framerate = 5
-        frames = 1:framerate * total_time
-        GLMakie.record(figure, filename, frames; framerate = framerate) do t
-            #println("Check collision w/ each other: ",
-            #        [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+    GLMakie.save("$filename"[1:end-4] * "_Open_Loop_path" * ".png", figure)
+    display(figure)
 
-            # Store speed data
-            push!(speed_data, [strategy[][1].xs[1][3], strategy[][2].xs[1][3], strategy[][3].xs[1][3]])
+    # Store openloop speed data
+    push!(openloop_speed_data, [vcat(strategy[][1].xs...)[3:4:end], vcat(strategy[][2].xs...)[3:4:end], vcat(strategy[][3].xs...)[3:4:end]])
 
-            # Store openloop speed data
-            push!(openloop_speed_data, [vcat(strategy[][1].xs...)[3:4:end], vcat(strategy[][2].xs...)[3:4:end], vcat(strategy[][3].xs...)[3:4:end]])
-
-            # Store openloop distance data
-            push!(openloop_distance1, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-            push!(openloop_distance2, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-            push!(openloop_distance3, [sqrt(sum((strategy[][2].xs[k][1:2] - strategy[][3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-
-            θ1.val[1:state_dim(dynamics)] = first(strategy[]).xs[begin + 1]
-            initial_state2[] = strategy[][2].xs[begin + 1]
-            initial_state3[] = strategy[][3].xs[begin + 1]
-
-        end
-    else
-        display(figure)
-        while !is_stopped[]
-            compute_time = @elapsed if !is_paused[]
-
-                # Store speed data
-                push!(speed_data, [strategy[][1].xs[1][3], strategy[][2].xs[1][3], strategy[][3].xs[1][3]])
-
-                # Store openloop speed data
-                push!(openloop_speed_data, [vcat(strategy[][1].xs...)[3:4:end], vcat(strategy[][2].xs...)[3:4:end], vcat(strategy[][3].xs...)[3:4:end]])
-
-                # Store openloop distance data
-                push!(openloop_distance1, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-                push!(openloop_distance2, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-                push!(openloop_distance3, [sqrt(sum((strategy[][2].xs[k][1:2] - strategy[][3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-
-                Main.@infiltrate
-
-                # Asynchronous update: mutate p1's initial state without triggering others
-                θ1.val[1:state_dim(dynamics)] = first(strategy[]).xs[begin + 1]
-                println("Update initial_state2 and initial_state3")
-                initial_state2[] = strategy[][2].xs[begin + 1]
-                initial_state3[] = strategy[][3].xs[begin + 1]
-
-            end
-            sleep(max(0.0, 0.1 - compute_time))
-        end
-        figure
-    end
-
-    Main.@infiltrate
-
-    # For visualization of receding horizon
-    fig = CairoMakie.Figure()
-    ax1 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "horizontal speed", title = "Receding Horizon")
-    CairoMakie.scatterlines!(ax1, 0:length(speed_data)-1, [v[1] for v in speed_data], color = :blue)
-    CairoMakie.scatterlines!(ax1, 0:length(speed_data)-1, [v[2] for v in speed_data], color = :red)
-    CairoMakie.lines!(ax1, 0:length(speed_data)-1, [0.1 for _ in 0:length(speed_data)-1], color = :black, linestyle = :dash)
-    fig
-    CairoMakie.save("$filename"[1:end-4] * "_Receding_Horizon" * ".png", fig)
+    # Store openloop distance data
+    push!(openloop_distance1, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+    push!(openloop_distance2, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+    push!(openloop_distance3, [sqrt(sum((strategy[][2].xs[k][1:2] - strategy[][3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
 
     # Visualize open-loop trajectory (speed)
     T = 1
-
     fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
-    ax2 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "speed", title = "Open loop speed at T = $T")
+    ax2 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "speed", title = "Open loop speed")
     CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, openloop_speed_data[T][1], color = :blue)
     CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, openloop_speed_data[T][2], color = :red)
     CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, openloop_speed_data[T][3], color = :green)
     CairoMakie.lines!(ax2, 0:planning_horizon-1, [0.1 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
     # Visualize open-loop trajectory (distance) , limits = (nothing, (collision_avoidance-0.05, 0.4)) 
-    ax3 = CairoMakie.Axis(fig[1, 2]; xlabel = "time step", ylabel = "distance", title = "Open loop distance at T = $T")
+    ax3 = CairoMakie.Axis(fig[1, 2]; xlabel = "time step", ylabel = "distance", title = "Open loop distance")
     CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, openloop_distance1[T], label = "B.w Agent 1 & Agent 2", color = :black, marker = :star5)
     CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, openloop_distance2[T], label = "B.w Agent 1 & Agent 3", color = :black, marker = :diamond)
     CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, openloop_distance3[T], label = "B.w Agent 2 & Agent 3", color = :black, marker = :circle)
@@ -406,20 +345,3 @@ function demo(; verbose = false, paused = false, record = false, filename = "Two
 end
 
 end
-
-
-# if verbose
-#     println("ii: ", ii)
-#     println("status: ", solution.status)
-#     # TODO: Automate 30
-#     solution_primals = [solution.primals[i][1:30] for i in 1:length(problem.objectives)]
-#     trajectory_primals = BlockArray(vcat(solution_primals...), [30, 30])
-#     #println("P1 objective : ", problem.objectives[1](trajectory_primals, augmented_parameters))
-#     #println("P2 objective : ", problem.objectives[2](trajectory_primals, augmented_parameters))
-#     println("P1 trajectory: ", trajectory_primals[Block(1)])
-#     println("P2 trajectory: ", trajectory_primals[Block(2)])
-#     println("P2 velocity: ", trajectory_primals[Block(2)][3:6:end])
-#     println("P1 slack at level 1: ", solution.primals[1][31])
-#     println("P2 slack at level 1: ", solution.primals[2][31])
-#     # println("P2 slack at level 2: ", solution.primals[2][94:113])
-# end
