@@ -49,6 +49,7 @@ function ParametricGamePenalty(;
     dummy_parameters = BlockArray(zeros(sum(parameter_dimensions)), parameter_dimensions)
 
     ordered_priority_levels = eachindex(prioritized_preferences[1]) # assume same number of levels for all players
+    num_levels = length(ordered_priority_levels) + 1
     num_players = length(objectives)
 
     # Store objectives
@@ -61,6 +62,8 @@ function ParametricGamePenalty(;
 
     primal_dimension_ii = 0
     start_idx = 1
+
+    # Main.@infiltrate
 
     function set_up_penalty(priority_level, player_idx)
         # Account for slack variables in the primal dimension at each priority level
@@ -81,7 +84,7 @@ function ParametricGamePenalty(;
 
         # Define objective with penalty terms.
         if priority_level == 1
-            append!(objectives_w_penalty, objectives[player_idx](x, θ))
+            append!(objectives_w_penalty, penalty_factors[player_idx][num_levels]*objectives[player_idx](x, θ))
         end
         objectives_w_penalty[player_idx] += penalty_factors[player_idx][priority_level]*sum(slacks_ii)
 
@@ -254,18 +257,18 @@ function solve_penalty(
         parameter_value;
         initial_guess = z0,
         verbose,
-        cumulative_iteration_limit = 350000,
+        cumulative_iteration_limit = 400000,
         proximal_perturbation = 1e-2,
         major_iteration_limit = 5000,
         minor_iteration_limit = 10000,
-        convergence_tolerance = 4e-2, #1e-6
+        convergence_tolerance = 2e-2, #1e-6
         nms_initial_reference_factor = 45000, #20
-        nms_maximum_watchdogs = 6000, #5
-        nms_memory_size = 14000, #10
+        nms_maximum_watchdogs = 8000, #5
+        nms_memory_size = 16000, #10
         nms_mstep_frequency = 3000, #10
         lemke_start_type = "advanced",
-        restart_limit = 70,
-        gradient_step_limit = 70,
+        restart_limit = 100,
+        gradient_step_limit = 100,
         use_basics = true,
         use_start = true,
     )

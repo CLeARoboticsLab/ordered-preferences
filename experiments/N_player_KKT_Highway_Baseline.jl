@@ -135,11 +135,11 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
     # Specify prioritized constraint
     is_prioritized_constraint = [[true, true], [true, true], [true, true]]
 
-    # Specify penalty factors [innermost level, second level]
+    # Specify penalty factors [innermost level, second level, outermost level]
     penalty_factors = [
-        [1000.0, 10.0],
-        [1000.0, 10.0],
-        [1000.0, 10.0]
+        [1.6, 0.8, 0.4],
+        [1.6, 0.8, 0.4],
+        [1.6, 0.8, 0.4]
     ]
 
     # Shared constraints
@@ -186,9 +186,9 @@ function demo(; verbose = false, paused = false, filename = "N_player_KKT_baseli
     planning_horizon = 10
     collision_avoidance = 0.2
 
-    (; problem, flatten_parameters) = get_setup(num_players; dynamics, planning_horizon, collision_avoidance)
-
     # Main.@infiltrate
+
+    (; problem, flatten_parameters) = get_setup(num_players; dynamics, planning_horizon, collision_avoidance)
 
     warmstart_solution = nothing
 
