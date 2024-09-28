@@ -3,7 +3,6 @@ module N_player_KKT_Highway
 using TrajectoryGamesExamples: UnicycleDynamics, planar_double_integrator
 using TrajectoryGamesBase:
     OpenLoopStrategy, unflatten_trajectory, state_dim, control_dim, control_bounds
-using GLMakie: GLMakie, Observable
 using CairoMakie: CairoMakie
 using BlockArrays
 using JLD2, ProgressMeter
@@ -197,7 +196,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
     primal_dimension = dynamics_dimension * planning_horizon
 
     # Common obstacle
-    obstacle_position = Observable([0.25, 0.15])
+    obstacle_position = [0.25, 0.15]
 
     # Tracking failed instances
     GOOP_fail = []
@@ -241,89 +240,55 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
         problem_data = JLD2.load_object("./data/relaxably_feasible/problem/rfp_$ii.jld2")
 
         # Player 1
-        initial_state1 = Observable(problem_data["initial_state1"])
-        goal_position1 = Observable([0.9, 0.0])
-        θ1 = GLMakie.@lift flatten_parameters(; # θ is a flat (column) vector of parameters
-            initial_state = $initial_state1,
-            goal_position = $goal_position1,
-            obstacle_position = $obstacle_position,
+        initial_state1 = problem_data["initial_state1"]
+        goal_position1 = [0.9, 0.0]
+        θ1 = flatten_parameters(; # θ is a flat (column) vector of parameters
+            initial_state = initial_state1,
+            goal_position = goal_position1,
+            obstacle_position = obstacle_position,
         )
 
         # Player 2
-        initial_state2 = Observable(problem_data["initial_state2"])
-        goal_position2 = Observable([0.9, 0.0])
-        θ2 = GLMakie.@lift flatten_parameters(; 
-            initial_state = $initial_state2,
-            goal_position = $goal_position2,
-            obstacle_position = $obstacle_position,
+        initial_state2 = problem_data["initial_state2"]
+        goal_position2 = [0.9, 0.0]
+        θ2 = flatten_parameters(; 
+            initial_state = initial_state2,
+            goal_position = goal_position2,
+            obstacle_position = obstacle_position,
         )
 
         # Player 3
-        initial_state3 = Observable(problem_data["initial_state3"])
-        goal_position3 = Observable([0.9, 0.0])
-        θ3 = GLMakie.@lift flatten_parameters(; 
-            initial_state = $initial_state3,
-            goal_position = $goal_position3,
-            obstacle_position = $obstacle_position,
+        initial_state3 = problem_data["initial_state3"]
+        goal_position3 = [0.9, 0.0]
+        θ3 = flatten_parameters(; 
+            initial_state = initial_state3,
+            goal_position = goal_position3,
+            obstacle_position = obstacle_position,
         )
 
-        θ = GLMakie.@lift [$θ1..., $θ2..., $θ3...]
+        θ = [θ1..., θ2..., θ3...]
 
         println("Solving problem instance #$ii...")
         println("initial_state1:", initial_state1)
         println("initial_state2:", initial_state2)
         println("initial_state3:", initial_state3)
 
-        strategy = GLMakie.@lift let
-            result = get_receding_horizon_solution($θ, ii; warmstart_solution)
-            warmstart_solution = nothing
-            if isnothing(result)
-                return nothing
-            else
-                return result.strategies
-            end
+
+        result = get_receding_horizon_solution(θ, ii; warmstart_solution)
+        warmstart_solution = nothing
+        if isnothing(result)
+            strategy = nothing
+        else
+            strategy = result.strategies
         end
 
+
         # If not solved, then continue to next problem instance (#5 cannot)
-        if isnothing(strategy[])
+        if isnothing(strategy)
             # Keep track
             push!(GOOP_fail, ii)
             continue
         else
-            # Plot solution
-            figure = GLMakie.Figure()
-            axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-1, 1), (-1, 1)))
-
-            # Visualize initial states (account for asynchronous update)
-            GLMakie.scatter!(
-                axis,
-                GLMakie.@lift([GLMakie.Point2f($θ1[1:2]), GLMakie.Point2f($θ2[1:2]), GLMakie.Point2f($θ3[1:2])]),
-                markersize = 20,
-                color = [:blue, :red, :green],
-            )
-
-            # Visualize highway lanes
-            GLMakie.lines!(axis, [(-1, 0.2), (1, 0.2)], color = :black)
-            GLMakie.lines!(axis, [(-1, -0.2), (1, -0.2)], color = :black)
-            GLMakie.lines!(axis, [(-1, 0.0), (1, 0.0)], color = :black, linestyle = :dash)
-
-            # Visualize goal positions (common goal)
-            GLMakie.scatter!(
-                axis,
-                GLMakie.@lift(GLMakie.Point2f($goal_position1)),
-                markersize = 20,
-                color = :cyan,
-            )
-
-            # Visualize trajectories
-            strategy1 = GLMakie.@lift OpenLoopStrategy($strategy[1].xs, $strategy[1].us)
-            strategy2 = GLMakie.@lift OpenLoopStrategy($strategy[2].xs, $strategy[2].us)
-            strategy3 = GLMakie.@lift OpenLoopStrategy($strategy[3].xs, $strategy[3].us)
-
-            # TODO Fix plots. x-y positions are swapped after updating Makie
-            GLMakie.plot!(axis, strategy1, color = :blue)
-            GLMakie.plot!(axis, strategy2, color = :red)
-            GLMakie.plot!(axis, strategy3, color = :green)
 
             # Store speed data for Highway
             horizontal_speed_data = Vector{Vector{Float64}}[]
@@ -332,17 +297,14 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
             openloop_distance2 = Vector{Float64}[]
             openloop_distance3 = Vector{Float64}[]
 
-            GLMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_trajectory_$ii" * ".png", figure)
-            display(figure)
-
             # Store openloop speed data
-            push!(horizontal_speed_data, [vcat(strategy[][1].xs...)[3:4:end], vcat(strategy[][2].xs...)[3:4:end], vcat(strategy[][3].xs...)[3:4:end]])
-            push!(vertical_speed_data, [vcat(strategy[][1].xs...)[4:4:end], vcat(strategy[][2].xs...)[4:4:end], vcat(strategy[][3].xs...)[4:4:end]])
+            push!(horizontal_speed_data, [vcat(strategy[1].xs...)[3:4:end], vcat(strategy[2].xs...)[3:4:end], vcat(strategy[3].xs...)[3:4:end]])
+            push!(vertical_speed_data, [vcat(strategy[1].xs...)[4:4:end], vcat(strategy[2].xs...)[4:4:end], vcat(strategy[3].xs...)[4:4:end]])
         
             # Store openloop distance data
-            push!(openloop_distance1, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-            push!(openloop_distance2, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-            push!(openloop_distance3, [sqrt(sum((strategy[][2].xs[k][1:2] - strategy[][3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+            push!(openloop_distance1, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+            push!(openloop_distance2, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+            push!(openloop_distance3, [sqrt(sum((strategy[2].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
 
             # Visualize horizontal speed
             T = 1
@@ -379,7 +341,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
     end
 
     # Save failed instances
-    JLD2.save_object("./data/relaxably_feasible/GOOP_solution/rfp_GOOP_fail.jld2", GOOP_fail)
+    JLD2.save_object("./data/rfp_GOOP_fail.jld2", GOOP_fail)
 
 end
 
