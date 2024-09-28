@@ -377,6 +377,10 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
             fig
         end
     end
+
+    # Save failed instances
+    JLD2.save_object("./data/relaxably_feasible/GOOP_solution/rfp_GOOP_fail.jld2", GOOP_fail)
+
 end
 
 end
