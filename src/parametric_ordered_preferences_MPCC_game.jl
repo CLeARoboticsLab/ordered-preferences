@@ -1,4 +1,4 @@
-Base.@kwdef struct ParametricOrderedPreferencesMPCCGame{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}
+struct ParametricOrderedPreferencesMPCCGame{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}
     "Objective functions for all players"
     objectives::T1
     "Equality constraints for all players"
@@ -375,18 +375,18 @@ function solve(
         parameter_value;
         initial_guess = z0,
         verbose = verbose,
-        cumulative_iteration_limit = 350000,
+        cumulative_iteration_limit = 450000, 
         proximal_perturbation = 1e-2,
-        major_iteration_limit = 4000,
-        minor_iteration_limit = 8000,
-        convergence_tolerance = PATH_tolerance, #1e-6
-        nms_initial_reference_factor = 45000, #20
-        nms_maximum_watchdogs = 6000, #5
-        nms_memory_size = 14000, #10
-        nms_mstep_frequency = 3000, #10
+        major_iteration_limit = 5000,
+        minor_iteration_limit = 10000,
+        convergence_tolerance = PATH_tolerance, #1e-1
+        nms_initial_reference_factor = 45000,
+        nms_maximum_watchdogs = 8000,
+        nms_memory_size = 16000,
+        nms_mstep_frequency = 3000,
         lemke_start_type = "advanced",
-        restart_limit = 60,
-        gradient_step_limit = 60,
+        restart_limit = 100,
+        gradient_step_limit = 100,
         use_basics = true,
         use_start = true,
     )
@@ -426,7 +426,7 @@ function solve_relaxed_pop_game(
 
     complementarity_residual = 1.0
     converged_tolerance = 1e-6
-    PATH_tolerance = 2e-2
+    PATH_tolerance = 3e-2
 
     relaxations = ϵ * κ.^(0:max_iterations) # [1.0, 0.1, 0.01, ... 1e-10]
     ii = 1
@@ -441,7 +441,7 @@ function solve_relaxed_pop_game(
             println("ii: ", ii)
             println("status: ", solution.status)
             # TODO: Automate T = 30 if N = 5, T = 60 if N = 10
-            T = 30 # N = 7
+            T = 30
             solution_primals = [solution.primals[i][1:T] for i in 1:length(problem.objectives)]
             trajectory_primals = BlockArray(vcat(solution_primals...), [T, T, T])
             println("P1 (x) trajectory: ", trajectory_primals[Block(1)][1:6:end])

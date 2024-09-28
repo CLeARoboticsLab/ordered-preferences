@@ -6,6 +6,7 @@ using TrajectoryGamesBase:
 using GLMakie: GLMakie, Observable
 using CairoMakie: CairoMakie
 using BlockArrays
+using JLD2, ProgressMeter
 
 using OrderedPreferences
 
@@ -148,9 +149,11 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
         @assert length(xs) == num_players
         # Avoid collision between 3 players
         mapreduce(vcat, 2:length(xs[1])) do k
-            sum((xs[1][k][1:2] - xs[2][k][1:2]) .^ 2) - collision_avoidance^2
-            sum((xs[1][k][1:2] - xs[3][k][1:2]) .^ 2) - collision_avoidance^2
-            sum((xs[2][k][1:2] - xs[3][k][1:2]) .^ 2) - collision_avoidance^2
+            [
+                sum((xs[1][k][1:2] - xs[2][k][1:2]) .^ 2) - collision_avoidance^2
+                sum((xs[1][k][1:2] - xs[3][k][1:2]) .^ 2) - collision_avoidance^2
+                sum((xs[2][k][1:2] - xs[3][k][1:2]) .^ 2) - collision_avoidance^2
+            ]
         end
     end
 
@@ -172,7 +175,7 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
     (; problem, flatten_parameters, unflatten_parameters)
 end
 
-function demo(; verbose = false, paused = false, record = false, filename = "Two_player_KKT_v12.mp4")
+function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.mp4")
     # Algorithm setting
     ϵ = 1.1
     κ = 0.1
@@ -180,7 +183,6 @@ function demo(; verbose = false, paused = false, record = false, filename = "Two
     tolerance = 5e-2
     relaxation_mode = :standard
 
-    # dynamics = UnicycleDynamics(; control_bounds = (; lb = 10*[-1.0, -1.0], ub = 10*[1.0, 1.0])) # x := (px, py, v, θ) and u := (a, ω). Need to give initial velocity
     num_players = 3
     dynamics = planar_double_integrator(; control_bounds = (; lb = [-2.0, -2.0], ub = [2.0, 2.0])) # x := (px, py, vx, vy) and u := (ax, ay).
     planning_horizon = 5
@@ -197,7 +199,8 @@ function demo(; verbose = false, paused = false, record = false, filename = "Two
     function get_receding_horizon_solution(θ; warmstart_solution)
         (; relaxation, solution, residual) =
             solve_relaxed_pop_game(problem, warmstart_solution, θ; ϵ, κ, max_iterations, tolerance, verbose)
-        # Choose the solution with best complementarity residual
+        
+            # Choose the solution with best complementarity residual
         min_residual_idx = argmin(residual)
         println("residual: ", residual[min_residual_idx])
         println("relaxation: ", relaxation[min_residual_idx])
@@ -205,221 +208,153 @@ function demo(; verbose = false, paused = false, record = false, filename = "Two
         strategies = mapreduce(vcat, 1:num_players) do i
             unflatten_trajectory(solution[min_residual_idx].primals[i][1:primal_dimension], state_dim(dynamics), control_dim(dynamics))
         end
+
         (; strategies, solution)
     end
 
     # Common obstacle
-    obstacle_position = Observable([0.25, 0.15])
+    obstacle_position = [0.25, 0.15]
 
-    # Player 1
-    initial_state1 = Observable([-0.3, 0.0, 0.6, 0.0])
-    goal_position1 = Observable([0.9, 0.0])
-    θ1 = GLMakie.@lift flatten_parameters(; # θ is a flat (column) vector of parameters
-        initial_state = $initial_state1,
-        goal_position = $goal_position1,
-        obstacle_position = $obstacle_position,
-    )
+    # Run the experiment
+    @showprogress for ii in 1:num_samples
+        # Load problem data
+        problem_data = JLD2.load_object("./data/relaxably_feasible/rfp_$ii.jld2")
 
-    # Player 2
-    initial_state2 = Observable([0.1, 0.0, 0.2, 0.0])
-    goal_position2 = Observable([0.9, 0.0])
-    θ2 = GLMakie.@lift flatten_parameters(; 
-        initial_state = $initial_state2,
-        goal_position = $goal_position2,
-        obstacle_position = $obstacle_position,
-    )
+        # Player 1
+        initial_state1 = problem_data["initial_state1"]
+        goal_position1 = [0.9, 0.0]
+        θ1 = flatten_parameters(; # θ is a flat (column) vector of parameters
+            initial_state = initial_state1,
+            goal_position = goal_position1,
+            obstacle_position = obstacle_position,
+        )
 
-    # Player 3
-    initial_state3 = Observable([0.3, 0.0, 0.2, 0.0])
-    goal_position3 = Observable([0.9, 0.0])
-    θ3 = GLMakie.@lift flatten_parameters(; 
-        initial_state = $initial_state3,
-        goal_position = $goal_position3,
-        obstacle_position = $obstacle_position,
-    )
+        # Player 2
+        initial_state2 = problem_data["initial_state2"]
+        goal_position2 = [0.9, 0.0]
+        θ2 = flatten_parameters(; 
+            initial_state = initial_state2,
+            goal_position = goal_position2,
+            obstacle_position = obstacle_position,
+        )
 
-    θ = GLMakie.@lift [$θ1..., $θ2..., $θ3...]
+        # Player 3
+        initial_state3 = problem_data["initial_state3"]
+        goal_position3 = [0.9, 0.0]
+        θ3 = flatten_parameters(; 
+            initial_state = initial_state3,
+            goal_position = goal_position3,
+            obstacle_position = obstacle_position,
+        )
 
-    println("Player 1's goal_position:", goal_position1)
-    println("Player 2's goal_position:", goal_position2)
-    println("Player 3's goal_position:", goal_position3)
+        θ = [θ1..., θ2..., θ3...]
 
-    # Main.@infiltrate
+        println("Solving problem instance #$ii...")
+        println("initial_state1:", initial_state1)
+        println("initial_state2:", initial_state2)
+        println("initial_state3:", initial_state3)
 
-    strategy = GLMakie.@lift let
-        result = get_receding_horizon_solution($θ; warmstart_solution)
-        warmstart_solution = nothing
-        result.strategies
-    end
+        # Main.@infiltrate
 
-    # Main.@infiltrate
-
-    figure = GLMakie.Figure()
-    axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-1, 1), (-1, 1)))
-
-    # pause and stop buttons
-    figure[2, 1] = buttongrid = GLMakie.GridLayout(tellwidth = false)
-    is_paused = GLMakie.Observable(paused)
-    buttongrid[1, 1] = pause_button = GLMakie.Button(figure, label = "Pause")
-    GLMakie.on(pause_button.clicks) do _
-        is_paused[] = !is_paused[]
-    end
-
-    is_stopped = GLMakie.Observable(false)
-    buttongrid[1, 2] = stop_button = GLMakie.Button(figure, label = "Stop")
-    GLMakie.on(stop_button.clicks) do _
-        is_stopped[] = !is_stopped[]
-    end
-
-    # visualize initial states (account for asynchronous update)
-    GLMakie.scatter!(
-        axis,
-        GLMakie.@lift([GLMakie.Point2f($θ1[1:2]), GLMakie.Point2f($θ2[1:2]), GLMakie.Point2f($θ3[1:2])]),
-        markersize = 20,
-        color = [:blue, :red, :green],
-    )
-
-    # # visualize obstacle position
-    # GLMakie.scatter!(
-    #     axis,
-    #     GLMakie.@lift(GLMakie.Point2f($obstacle_position)),
-    #     markersize = 2 * obstacle_radius * sqrt(2), # sqrt2 compensating for GLMakie bug
-    #     markerspace = :data,
-    #     color = (:red, 0.5),
-    # )
-
-    # Visualize highway lanes
-    GLMakie.lines!(axis, [(-1, 0.2), (1, 0.2)], color = :black)
-    GLMakie.lines!(axis, [(-1, -0.2), (1, -0.2)], color = :black)
-    GLMakie.lines!(axis, [(-1, 0.0), (1, 0.0)], color = :black, linestyle = :dash)
-
-    # visualize goal positions (common goal for now)
-    GLMakie.scatter!(
-        axis,
-        GLMakie.@lift(GLMakie.Point2f($goal_position1)),
-        markersize = 20,
-        color = :cyan,
-    )
-
-    # Main.@infiltrate
-
-    # Visualize trajectories
-    strategy1 = GLMakie.@lift OpenLoopStrategy($strategy[1].xs, $strategy[1].us)
-    strategy2 = GLMakie.@lift OpenLoopStrategy($strategy[2].xs, $strategy[2].us)
-    strategy3 = GLMakie.@lift OpenLoopStrategy($strategy[3].xs, $strategy[3].us)
-    GLMakie.plot!(axis, strategy1, color = :blue)
-    GLMakie.plot!(axis, strategy2, color = :red)
-    GLMakie.plot!(axis, strategy3, color = :green)
-
-    # Store speed data for Highway
-    speed_data = Vector{Float64}[]
-    openloop_speed_data = Vector{Vector{Float64}}[]
-    openloop_distance1 = Vector{Float64}[]
-    openloop_distance2 = Vector{Float64}[]
-    openloop_distance3 = Vector{Float64}[]
-
-    total_time = 12 # seconds
-    if record # record the simulation
-        # Record for 7 seconds at a rate of 10 fps
-        framerate = 5
-        frames = 1:framerate * total_time
-        GLMakie.record(figure, filename, frames; framerate = framerate) do t
-            #println("Check collision w/ each other: ",
-            #        [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-
-            # Store speed data
-            push!(speed_data, [strategy[][1].xs[1][3], strategy[][2].xs[1][3], strategy[][3].xs[1][3]])
-
-            # Store openloop speed data
-            push!(openloop_speed_data, [vcat(strategy[][1].xs...)[3:4:end], vcat(strategy[][2].xs...)[3:4:end], vcat(strategy[][3].xs...)[3:4:end]])
-
-            # Store openloop distance data
-            push!(openloop_distance1, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-            push!(openloop_distance2, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-            push!(openloop_distance3, [sqrt(sum((strategy[][2].xs[k][1:2] - strategy[][3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-
-            θ1.val[1:state_dim(dynamics)] = first(strategy[]).xs[begin + 1]
-            initial_state2[] = strategy[][2].xs[begin + 1]
-            initial_state3[] = strategy[][3].xs[begin + 1]
-
+        strategy = let
+            result = get_receding_horizon_solution(θ; warmstart_solution)
+            warmstart_solution = nothing
+            result.strategies
         end
-    else
+
+        # Main.@infiltrate
+
+        # Save solution data
+        #TODO
+
+        # Compute and save constraint violation data
+        #TODO
+
+
+        figure = GLMakie.Figure()
+        axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-1, 1), (-1, 1)))
+
+        # visualize initial states (account for asynchronous update)
+        GLMakie.scatter!(
+            axis,
+            ([GLMakie.Point2f(θ1[1:2]), GLMakie.Point2f(θ2[1:2]), GLMakie.Point2f(θ3[1:2])]),
+            markersize = 20,
+            color = [:blue, :red, :green],
+        )
+
+        # Visualize highway lanes
+        GLMakie.lines!(axis, [(-1, 0.2), (1, 0.2)], color = :black)
+        GLMakie.lines!(axis, [(-1, -0.2), (1, -0.2)], color = :black)
+        GLMakie.lines!(axis, [(-1, 0.0), (1, 0.0)], color = :black, linestyle = :dash)
+
+        # visualize goal positions (common goal for now)
+        GLMakie.scatter!(
+            axis,
+            (GLMakie.Point2f(goal_position1)),
+            markersize = 20,
+            color = :cyan,
+        )
+
+        # Visualize trajectories
+        strategy1 = OpenLoopStrategy(strategy[1].xs, strategy[1].us)
+        strategy2 = OpenLoopStrategy(strategy[2].xs, strategy[2].us)
+        strategy3 = OpenLoopStrategy(strategy[3].xs, strategy[3].us)
+        GLMakie.plot!(axis, strategy1, color = :blue)
+        GLMakie.plot!(axis, strategy2, color = :red)
+        GLMakie.plot!(axis, strategy3, color = :green)
+
+        # Store speed data for Highway
+        horizontal_speed_data = Vector{Vector{Float64}}[]
+        vertical_speed_data = Vector{Vector{Float64}}[]
+        openloop_distance1 = Vector{Float64}[]
+        openloop_distance2 = Vector{Float64}[]
+        openloop_distance3 = Vector{Float64}[]
+
+        GLMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_trajectory_$ii" * ".png", figure)
         display(figure)
-        while !is_stopped[]
-            compute_time = @elapsed if !is_paused[]
 
-                # Store speed data
-                push!(speed_data, [strategy[][1].xs[1][3], strategy[][2].xs[1][3], strategy[][3].xs[1][3]])
+        # Store openloop speed data
+        push!(horizontal_speed_data, [vcat(strategy[1].xs...)[3:4:end], vcat(strategy[2].xs...)[3:4:end], vcat(strategy[3].xs...)[3:4:end]])
+        push!(vertical_speed_data, [vcat(strategy[1].xs...)[4:4:end], vcat(strategy[2].xs...)[4:4:end], vcat(strategy[3].xs...)[4:4:end]])
+    
+        # Store openloop distance data
+        push!(openloop_distance1, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+        push!(openloop_distance2, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+        push!(openloop_distance3, [sqrt(sum((strategy[2].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+        
+        Main.@infiltrate # TODO Fix plots
 
-                # Store openloop speed data
-                push!(openloop_speed_data, [vcat(strategy[][1].xs...)[3:4:end], vcat(strategy[][2].xs...)[3:4:end], vcat(strategy[][3].xs...)[3:4:end]])
+        # Visualize horizontal speed
+        T = 1
+        fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
+        ax2 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "speed", title = "Horizontal Speed")
+        CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][1], color = :blue)
+        CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][2], color = :red)
+        CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][3], color = :green)
+        CairoMakie.lines!(ax2, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
 
-                # Store openloop distance data
-                push!(openloop_distance1, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-                push!(openloop_distance2, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-                push!(openloop_distance3, [sqrt(sum((strategy[][2].xs[k][1:2] - strategy[][3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+        ax3 = CairoMakie.Axis(fig[1, 2]; xlabel = "time step", ylabel = "speed", title = "Vertical Speed")
+        CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][1], color = :blue)
+        CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][2], color = :red)
+        CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][3], color = :green)
+        CairoMakie.lines!(ax3, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+        CairoMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_speed_$ii" * ".png", fig)
+        fig
 
-                Main.@infiltrate
+        Main.@infiltrate
+        # Visualize distance bw vehicles , limits = (nothing, (collision_avoidance-0.05, 0.4)) 
+        fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
+        ax4 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "distance", title = "Distance bw vehicles")
+        CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance1[T], label = "B/w Agent 1 & Agent 2", color = :black, marker = :star5)
+        CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance2[T], label = "B/w Agent 1 & Agent 3", color = :black, marker = :diamond)
+        CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance3[T], label = "B/w Agent 2 & Agent 3", color = :black, marker = :circle)
+        CairoMakie.lines!(ax4, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+        CairoMakie.axislegend(ax4)
 
-                # Asynchronous update: mutate p1's initial state without triggering others
-                θ1.val[1:state_dim(dynamics)] = first(strategy[]).xs[begin + 1]
-                println("Update initial_state2 and initial_state3")
-                initial_state2[] = strategy[][2].xs[begin + 1]
-                initial_state3[] = strategy[][3].xs[begin + 1]
-
-            end
-            sleep(max(0.0, 0.1 - compute_time))
-        end
-        figure
+        CairoMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_distance_$ii" * ".png", fig)
+        fig
+        Main.@infiltrate
     end
-
-    Main.@infiltrate
-
-    # For visualization of receding horizon
-    fig = CairoMakie.Figure()
-    ax1 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "horizontal speed", title = "Receding Horizon")
-    CairoMakie.scatterlines!(ax1, 0:length(speed_data)-1, [v[1] for v in speed_data], color = :blue)
-    CairoMakie.scatterlines!(ax1, 0:length(speed_data)-1, [v[2] for v in speed_data], color = :red)
-    CairoMakie.lines!(ax1, 0:length(speed_data)-1, [0.1 for _ in 0:length(speed_data)-1], color = :black, linestyle = :dash)
-    fig
-    CairoMakie.save("$filename"[1:end-4] * "_Receding_Horizon" * ".png", fig)
-
-    # Visualize open-loop trajectory (speed)
-    T = 1
-
-    fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
-    ax2 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "speed", title = "Open loop speed at T = $T")
-    CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, openloop_speed_data[T][1], color = :blue)
-    CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, openloop_speed_data[T][2], color = :red)
-    CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, openloop_speed_data[T][3], color = :green)
-    CairoMakie.lines!(ax2, 0:planning_horizon-1, [0.1 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
-    # Visualize open-loop trajectory (distance) , limits = (nothing, (collision_avoidance-0.05, 0.4)) 
-    ax3 = CairoMakie.Axis(fig[1, 2]; xlabel = "time step", ylabel = "distance", title = "Open loop distance at T = $T")
-    CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, openloop_distance1[T], label = "B.w Agent 1 & Agent 2", color = :black, marker = :star5)
-    CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, openloop_distance2[T], label = "B.w Agent 1 & Agent 3", color = :black, marker = :diamond)
-    CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, openloop_distance3[T], label = "B.w Agent 2 & Agent 3", color = :black, marker = :circle)
-    CairoMakie.lines!(ax3, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
-    # TODO: CairoMakie.axislegend()
-
-    CairoMakie.save("$filename"[1:end-4] * "_Open_Loop" * ".png", fig)
-    fig
 end
 
 end
-
-
-# if verbose
-#     println("ii: ", ii)
-#     println("status: ", solution.status)
-#     # TODO: Automate 30
-#     solution_primals = [solution.primals[i][1:30] for i in 1:length(problem.objectives)]
-#     trajectory_primals = BlockArray(vcat(solution_primals...), [30, 30])
-#     #println("P1 objective : ", problem.objectives[1](trajectory_primals, augmented_parameters))
-#     #println("P2 objective : ", problem.objectives[2](trajectory_primals, augmented_parameters))
-#     println("P1 trajectory: ", trajectory_primals[Block(1)])
-#     println("P2 trajectory: ", trajectory_primals[Block(2)])
-#     println("P2 velocity: ", trajectory_primals[Block(2)][3:6:end])
-#     println("P1 slack at level 1: ", solution.primals[1][31])
-#     println("P2 slack at level 1: ", solution.primals[2][31])
-#     # println("P2 slack at level 2: ", solution.primals[2][94:113])
-# end
