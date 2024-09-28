@@ -200,7 +200,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
     obstacle_position = Observable([0.25, 0.15])
 
     # Tracking failed instances
-    GOOP_infeasible = []
+    GOOP_fail = []
 
     function get_receding_horizon_solution(θ, ii; warmstart_solution)
         (; relaxation, solution, residual) =
@@ -287,7 +287,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
         # If not solved, then continue to next problem instance (#5 cannot)
         if isnothing(strategy[])
             # Keep track
-            push!(GOOP_infeasible, ii)
+            push!(GOOP_fail, ii)
             continue
         else
             # Plot solution
