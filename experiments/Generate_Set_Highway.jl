@@ -173,7 +173,7 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
     (; problem, flatten_parameters, unflatten_parameters)
 end
 
-function demo(; verbose = false, paused = false, record = false, filename = "N_player_GOOP_v1.mp4")
+function demo(; verbose = false, num_samples = 10)
 
     num_players = 3
     dynamics = planar_double_integrator(; control_bounds = (; lb = [-2.0, -2.0], ub = [2.0, 2.0])) # x := (px, py, vx, vy) and u := (ax, ay).
@@ -193,7 +193,7 @@ function demo(; verbose = false, paused = false, record = false, filename = "N_p
         return solution # (; primals, variables = z, objectives, status, info)
     end
 
-    function generate_samples(num_samples = 10, range = 0.05)
+    function generate_samples(num_samples)
         samples = []
         ii, jj = 1, 1
         obstacle_position = [0.5, 0.5] # placeholder
@@ -245,13 +245,13 @@ function demo(; verbose = false, paused = false, record = false, filename = "N_p
             # 2. If sol with positive objective, this is a relaxably feasible problem and goes to "Relaxably Feasible Set" 
             elseif any(x -> x > 0, solution.objectives)
                 println("Relaxably feasible problem...saving the instance #$ii")
-                file_name = "./data/relaxably_feasible/rfp_$ii.jld2"
+                file_name = "./data/relaxably_feasible/problem/rfp_$ii.jld2"
                 ii += 1
 
             # 3. If sol with zero objective, this is a trivially feasible problem and goes to "Trivially Feasible Set"
             elseif all(x -> isapprox(x, 0.0; atol=1e-4), solution.objectives)
                 println("Trivially feasible problem...saving the instance #$jj")
-                file_name = "./data/trivially_feasible/tfp_$jj.jld2"
+                file_name = "./data/trivially_feasible/problem/tfp_$jj.jld2"
                 jj += 1
 
             else
@@ -264,7 +264,7 @@ function demo(; verbose = false, paused = false, record = false, filename = "N_p
         samples
     end
 
-    samples = generate_samples(10)
+    samples = generate_samples(num_samples)
 
     for sample in samples
         println(sample)

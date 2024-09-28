@@ -1,4 +1,4 @@
-struct ParametricOrderedPreferencesMPCCGame{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}
+struct ParametricOrderedPreferencesMPCCGame{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10,T11}
     "Objective functions for all players"
     objectives::T1
     "Equality constraints for all players"
@@ -31,6 +31,9 @@ struct ParametricOrderedPreferencesMPCCGame{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}
 
     "Trajectory primals."
     trajectory_idx::T10
+
+    "Sum of slacks for each level"
+    private_slacks::T11
 
 end
 
@@ -72,6 +75,9 @@ function ParametricOrderedPreferencesMPCCGame(;
     # Store dimensions
     private_primals = [[dim] for dim in primal_dimensions]
 
+    # Store (callable) slacks
+    private_slacks = Function[]
+
     start_idx = 1
 
     # Main.@infiltrate
@@ -83,11 +89,9 @@ function ParametricOrderedPreferencesMPCCGame(;
             prioritized_constraints_ii = prioritized_preferences[player_idx][priority_level] # fᵢ(x,θ) ≥ 0
             slack_dimension_ii = length(prioritized_constraints_ii(dummy_primals, dummy_parameters))
             primal_dimension_ii += slack_dimension_ii
-            append!(private_primals[player_idx], slack_dimension_ii) #[30,4,68,4,151],[30,4,68, 4]
-            inequality_dimension_ii[player_idx] += slack_dimension_ii * 2 # add nonnegativity on slacks
-            # if priority_level == first(ordered_priority_levels)
-            #     equality_dimension_ii[player_idx] += slack_dimension_ii # sᵢ = 0 for most important constraint
-            # end
+            append!(private_primals[player_idx], slack_dimension_ii) 
+            inequality_dimension_ii[player_idx] += slack_dimension_ii * 2 # account for sᵢ ≥ 0
+
         end
 
         # Main.@infiltrate
@@ -99,7 +103,7 @@ function ParametricOrderedPreferencesMPCCGame(;
         θ̃ = Symbolics.scalarize(only(Symbolics.@variables(θ̃[1:augmented_parameter_dimension])))
         θ = BlockArray(θ̃, vcat(parameter_dimensions, [1]))
 
-        x = BlockArray(z[Block(1)], private_primals[player_idx]) # [30, 4, 68, 4]
+        x = BlockArray(z[Block(1)], private_primals[player_idx]) 
         λ = z[Block(2)]
         μ = z[Block(3)]
 
@@ -111,19 +115,9 @@ function ParametricOrderedPreferencesMPCCGame(;
 
         if is_prioritized_constraint[player_idx][priority_level]
 
-            # Main.@infiltrate
-
             slacks_ii = last(z[Block(1)], slack_dimension_ii)
 
-            # # objective: minimize sum of squared slacks, min ∑sᵢ²
-            # if priority_level == 1
-            #     objective_ii = 0.1*sum(slacks_ii)
-            # else
-            #     objective_ii = 0.2*sum(slacks_ii)
-            # end
-
             objective_ii = 0.1*sum(slacks_ii)
-
 
             # auxillary constraint: fᵢ(x,θ) + sᵢ ≥ 0 
             auxillary_constraints = prioritized_constraints_ii(x, θ) .+ slacks_ii
@@ -132,13 +126,13 @@ function ParametricOrderedPreferencesMPCCGame(;
             # auxillary constraint: sᵢ ≥ 0
             append!(private_inner_inequality_constraints[player_idx], slacks_ii)
 
-            # # Most priority constraint slack, sᵢ = 0
-            # if priority_level == first(ordered_priority_levels)
-            #     append!(private_inner_equality_constraints[player_idx], slacks_ii)
-            # end
-            
+            # store private_slacks
+            x_temp = let
+                Symbolics.scalarize(only(Symbolics.@variables(z̃[1:total_dimension+start_idx+1])))
+            end
+            sum_slacks = Symbolics.build_function(sum(slacks_ii), x_temp, θ, expression=Val{false})
+            push!(private_slacks, sum_slacks)
         else
-            # Main.@infiltrate
             priority_objective_ii = prioritized_preferences[player_idx][priority_level]
             objective_ii = priority_objective_ii(x,θ)[1] # convert from Vector{Num} to Symbolics.Num 
         end
@@ -152,8 +146,6 @@ function ParametricOrderedPreferencesMPCCGame(;
         if isempty(g_ii)
             g_ii = Symbolics.Num[]
         end
-
-        # Main.@infiltrate
 
         # Lagrangian.
         L = objective_ii - λ' * h_ii - μ' * g_ii
@@ -194,8 +186,6 @@ function ParametricOrderedPreferencesMPCCGame(;
 
         # Keep complementarity constraints for convergence evaluation.
         append!(inner_complementarity_constraints, complementarity)
-
-        # Main.@infiltrate
     end
 
     # Build KKT system for each priority level for each player's own problem
@@ -344,6 +334,7 @@ function ParametricOrderedPreferencesMPCCGame(;
         parametric_mcp,
         exact_complementarity_constraints,
         trajectory_idx,
+        private_slacks,
     )
 end
 
@@ -375,10 +366,10 @@ function solve(
         parameter_value;
         initial_guess = z0,
         verbose = verbose,
-        cumulative_iteration_limit = 450000, 
+        cumulative_iteration_limit = 500000,
         proximal_perturbation = 1e-2,
-        major_iteration_limit = 5000,
-        minor_iteration_limit = 10000,
+        major_iteration_limit = 10000,
+        minor_iteration_limit = 15000,
         convergence_tolerance = PATH_tolerance, #1e-1
         nms_initial_reference_factor = 45000,
         nms_maximum_watchdogs = 8000,
@@ -391,13 +382,16 @@ function solve(
         use_start = true,
     )
 
-    # Main.@infiltrate
+    # Compute slacks for each level
+    slacks = vcat(
+            map(private_slacks -> private_slacks(z, parameter_value), problem.private_slacks)
+        )
 
     if return_primals
         primals = blocks(BlockArray(z[1:sum(problem.primal_dimensions)], problem.primal_dimensions))
-        return (; primals, variables = z, status, info)
+        return (; primals, variables = z, slacks, status, info)
     else
-        return (; variables = z, status, info)
+        return (; variables = z, slacks, status, info)
     end
 end
 
@@ -484,7 +478,6 @@ function solve_relaxed_pop_game(
 
         if complementarity_residual < tolerance
             printstyled("Found a solution with complementarity residual less than tol=$(tolerance).\n"; color = :blue)
-            # Main.@infiltrate
             break
         end
 
@@ -494,8 +487,6 @@ function solve_relaxed_pop_game(
             push!(solutions, solution)
             break
         end
-
-        # Main.@infiltrate
 
         # Update initial_guess
         initial_guess = zeros(total_dim(problem))
