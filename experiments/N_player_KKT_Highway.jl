@@ -295,6 +295,8 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
             color = :cyan,
         )
 
+        Main.@infiltrate # TODO Fix plots
+
         # Visualize trajectories
         strategy1 = OpenLoopStrategy(strategy[1].xs, strategy[1].us)
         strategy2 = OpenLoopStrategy(strategy[2].xs, strategy[2].us)
@@ -310,6 +312,8 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
         openloop_distance2 = Vector{Float64}[]
         openloop_distance3 = Vector{Float64}[]
 
+        Main.@infiltrate # TODO Fix plots
+
         GLMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_trajectory_$ii" * ".png", figure)
         display(figure)
 
@@ -322,22 +326,24 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
         push!(openloop_distance2, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
         push!(openloop_distance3, [sqrt(sum((strategy[2].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
         
-        Main.@infiltrate # TODO Fix plots
+        Main.@infiltrate
 
         # Visualize horizontal speed
         T = 1
         fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
         ax2 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "speed", title = "Horizontal Speed")
-        CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][1], color = :blue)
-        CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][2], color = :red)
-        CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][3], color = :green)
+        CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][1], label = "Vehicle 1", color = :blue)
+        CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][2], label = "Vehicle 2", color = :red)
+        CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][3], label = "Vehicle 3", color = :green)
         CairoMakie.lines!(ax2, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+        fig[2,1] = CairoMakie.Legend(fig, ax2, framevisible = false, orientation = :horizontal)
 
         ax3 = CairoMakie.Axis(fig[1, 2]; xlabel = "time step", ylabel = "speed", title = "Vertical Speed")
-        CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][1], color = :blue)
-        CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][2], color = :red)
-        CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][3], color = :green)
+        CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][1], label = "Vehicle 1", color = :blue)
+        CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][2], label = "Vehicle 2", color = :red)
+        CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][3], label = "Vehicle 3", color = :green)
         CairoMakie.lines!(ax3, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+
         CairoMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_speed_$ii" * ".png", fig)
         fig
 
@@ -349,7 +355,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
         CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance2[T], label = "B/w Agent 1 & Agent 3", color = :black, marker = :diamond)
         CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance3[T], label = "B/w Agent 2 & Agent 3", color = :black, marker = :circle)
         CairoMakie.lines!(ax4, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
-        CairoMakie.axislegend(ax4)
+        fig[2,1] = CairoMakie.Legend(fig, ax4, framevisible = false, orientation = :horizontal)
 
         CairoMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_distance_$ii" * ".png", fig)
         fig
