@@ -210,10 +210,10 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
 
     # Distribution for sampling feasible trajectories
     Random.seed!(123)
-    dist = Normal(0.0, 0.01) # 0.0001
+    dist = Normal(0.0, 0.01)
     num_perturb = 20
     equilibrium_tally_goop = []
-    tol = 1e-2 # 0.001
+    tol = 1e-2 
 
     function get_receding_horizon_solution(θ, ii; warmstart_solution)
         (; relaxation, solution, residual) =
@@ -367,7 +367,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
                             println("    f₂(x*, θ) close to f₂(x, θ) for player #$kk")
                             println("    |f₂(x*, θ) - f₂(x, θ)| = $(abs(f₂_star - f₂))")
                         else
-                            println("    f₂(x*, θ) < f₂(x, θ) SOMETHING IS WRONG for player #$kk")
+                            println("    f₂(x*, θ) > f₂(x, θ) SOMETHING IS WRONG for player #$kk")
                         end
                     else
                         println("    f₃(x*, θ) > f₃(x, θ) SOMETHING IS WRONG for player #$kk")
