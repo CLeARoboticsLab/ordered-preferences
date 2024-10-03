@@ -1,15 +1,14 @@
-module N_player_KKT_Highway
-
+module N_player_KKT_Highway_Baseline
 using TrajectoryGamesExamples: UnicycleDynamics, planar_double_integrator
 using TrajectoryGamesBase:
     OpenLoopStrategy, unflatten_trajectory, state_dim, control_dim, control_bounds
 using CairoMakie: CairoMakie
 using BlockArrays
-using JLD2, ProgressMeter, Distributions, Random
+using JLD2, ProgressMeter
 
 using OrderedPreferences
 
-function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 20, obstacle_radius = 0.25,  collision_avoidance = 0.2, relaxation_mode = :standard)
+function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 20, collision_avoidance = 0.2)
     state_dimension = state_dim(dynamics)
     control_dimension = control_dim(dynamics)
     primals_per_agent = (state_dimension + control_dimension) * planning_horizon
@@ -33,13 +32,13 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
 
     objectives = [
         function (z, θ)
-            (; xs, us) = unflatten_trajectory(z[Block(i)], state_dimension, control_dimension)
+            (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
             sum(sum(u .^ 2) for u in us)
         end
-        for i in 1:num_players
+        for _ in 1:num_players
     ]
 
-    equality_constraints = [ # private: z[Block(1)] are original private primals
+    equality_constraints = [ # Unlike before, z[Block(i)] are (original) private primals
         function (z, θ)
             (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
             (; initial_state) = unflatten_parameters(θ[Block(i)])
@@ -51,7 +50,6 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
         end
         for i in 1:num_players
     ] 
-    equality_dimensions = [length(equality_constraints[i](dummy_primals, dummy_parameters)) for i in 1:num_players]
 
     inequality_constraints = [
         function (z, θ)
@@ -75,7 +73,6 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
         end
         for _ in 1:num_players
     ]
-    inequality_dimensions = [length(inequality_constraints[i](dummy_primals, dummy_parameters)) for i in 1:num_players]
 
     prioritized_preferences = [
         [
@@ -137,6 +134,13 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
     # Specify prioritized constraint
     is_prioritized_constraint = [[true, true], [true, true], [true, true]]
 
+    # Specify penalty factors [innermost level, second level, outermost level]
+    penalty_factors = [
+        [100.0, 10.0, 1.0],
+        [100.0, 10.0, 1.0],
+        [100.0, 10.0, 1.0]
+    ]
+
     # Shared constraints
     function shared_equality_constraints(z, θ)
         [0]
@@ -148,15 +152,16 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
         @assert length(xs) == num_players
         # Avoid collision between 3 players
         mapreduce(vcat, 2:length(xs[1])) do k
-            [
-                sum((xs[1][k][1:2] - xs[2][k][1:2]) .^ 2) - collision_avoidance^2
-                sum((xs[1][k][1:2] - xs[3][k][1:2]) .^ 2) - collision_avoidance^2
-                sum((xs[2][k][1:2] - xs[3][k][1:2]) .^ 2) - collision_avoidance^2
-            ]
+            [sum((xs[1][k][1:2] - xs[2][k][1:2]) .^ 2) - collision_avoidance^2;
+            sum((xs[1][k][1:2] - xs[3][k][1:2]) .^ 2) - collision_avoidance^2;
+            sum((xs[2][k][1:2] - xs[3][k][1:2]) .^ 2) - collision_avoidance^2]
         end
     end
 
-    problem = ParametricOrderedPreferencesMPCCGame(;
+    shared_equality_dimension = length(shared_equality_constraints(dummy_primals, dummy_parameters))
+    shared_inequality_dimension = length(shared_inequality_constraints(dummy_primals, dummy_parameters))
+
+    problem = ParametricGamePenalty(;
         objectives,
         equality_constraints,
         inequality_constraints,
@@ -166,36 +171,24 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
         shared_inequality_constraints,
         primal_dimensions,
         parameter_dimensions,
-        equality_dimensions,
-        inequality_dimensions,
-        relaxation_mode,
+        shared_equality_dimension,
+        shared_inequality_dimension,
+        penalty_factors
     )
 
-    (; problem, flatten_parameters, equality_constraints, inequality_constraints, shared_equality_constraints, shared_inequality_constraints, prioritized_preferences)
+    (; problem, flatten_parameters, unflatten_parameters)
 end
 
-function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.mp4")
-    # Algorithm setting
-    ϵ = 1.1
-    κ = 0.1
-    max_iterations = 6 # 6
-    tolerance = 5e-2
-    relaxation_mode = :standard
-
+function demo(; verbose = false, num_samples = 10, filename = "N_player_KKT_baseline.mp4")
     num_players = 3
     dynamics = planar_double_integrator(; control_bounds = (; lb = [-2.0, -2.0], ub = [2.0, 2.0])) # x := (px, py, vx, vy) and u := (ax, ay).
     planning_horizon = 5
     obstacle_radius = 0.25
     collision_avoidance = 0.2
 
-    (; problem, flatten_parameters, equality_constraints, inequality_constraints,
-        shared_equality_constraints, shared_inequality_constraints, prioritized_preferences) = get_setup(
-        num_players;
-        dynamics,
-        planning_horizon,
-        obstacle_radius,
-        collision_avoidance,
-        relaxation_mode)
+    # TODO: Make this for all penalty weights 
+
+    (; problem, flatten_parameters) = get_setup(num_players; dynamics, planning_horizon, collision_avoidance)
 
     warmstart_solution = nothing
 
@@ -206,54 +199,33 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
     obstacle_position = [0.25, 0.15]
 
     # Tracking not-converged instances
-    GOOP_not_converged = []
-
-    # Distribution for sampling feasible trajectories
-    Random.seed!(123)
-    dist = Normal(0.0, 0.01)
-    num_perturb = 20
-    equilibrium_tally_goop = []
-    tol = 1e-2 
+    Baseline_not_converged = []
 
     function get_receding_horizon_solution(θ, ii; warmstart_solution)
-        (; relaxation, solution, residual) =
-            solve_relaxed_pop_game(problem, warmstart_solution, θ; ϵ, κ, max_iterations, tolerance, verbose)
-
-        if all([string(solution[i].status) != "MCP_Solved" for i in 1:first(size(solution))])
-            println("GOOP could not find a solution...moving on to the next problem")
-            return nothing
-        else
-            # Choose the solution with best complementarity residual
-            min_residual_idx = argmin(residual)
-            println("residual: ", residual[min_residual_idx])
-            println("relaxation: ", relaxation[min_residual_idx])
-            println("slacks: ", solution[min_residual_idx].slacks)
-            strategies = mapreduce(vcat, 1:num_players) do i
-                unflatten_trajectory(solution[min_residual_idx].primals[i][1:primal_dimension], state_dim(dynamics), control_dim(dynamics))
-            end
-
-            # Save solution
-            solution_dict = Dict(
-                "residual" => residual[min_residual_idx],
-                "relaxation" => relaxation[min_residual_idx],
-                "slacks" => solution[min_residual_idx].slacks,
-                "strategy1" => strategies[1],
-                "strategy2" => strategies[2],
-                "strategy3" => strategies[3],
-            )
-            JLD2.save_object("./data/relaxably_feasible/GOOP_solution/rfp_$ii"*"_sol.jld2", solution_dict)
+        solution = solve_penalty(problem, θ; initial_guess = warmstart_solution, verbose, return_primals = true)
+        strategies = mapreduce(vcat, 1:num_players) do i
+            unflatten_trajectory(solution.primals[i][1:primal_dimension], state_dim(dynamics), control_dim(dynamics))
         end
+
+        # Save solution
+        solution_dict = Dict(
+            "slacks" => solution.slacks,
+            "strategy1" => strategies[1],
+            "strategy2" => strategies[2],
+            "strategy3" => strategies[3],
+        )
+        JLD2.save_object("./data/relaxably_feasible/Baseline_solution/rfp_$ii"*"_sol.jld2", solution_dict)
 
         (; strategies, solution)
     end
 
-    # Run the experiment
-    @showprogress desc="Running problem instances..." for ii in 1:num_samples
+    # Run the baseline experiment
+    @showprogress desc="Running problem instances using baseline..." for ii in 1:num_samples
         # Load problem data
-        problem_data = JLD2.load_object("./data/relaxably_feasible/problem/rfp_$ii.jld2")
+        problem_data = JLD2.load_object("./data/relaxably_feasible/problem/rfp_$ii"*".jld2")
 
         # Player 1
-        initial_state1 = problem_data["initial_state1"]
+        initial_state1 = problem_data["initial_state1"] # (px, py, vx, vy)
         goal_position1 = [0.9, 0.0]
         θ1 = flatten_parameters(; # θ is a flat (column) vector of parameters
             initial_state = initial_state1,
@@ -264,16 +236,16 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
         # Player 2
         initial_state2 = problem_data["initial_state2"]
         goal_position2 = [0.9, 0.0]
-        θ2 = flatten_parameters(; 
+        θ2 = flatten_parameters(;
             initial_state = initial_state2,
             goal_position = goal_position2,
             obstacle_position = obstacle_position,
         )
 
-        # Player 3
+        # Player 3 
         initial_state3 = problem_data["initial_state3"]
         goal_position3 = [0.9, 0.0]
-        θ3 = flatten_parameters(; 
+        θ3 = flatten_parameters(;
             initial_state = initial_state3,
             goal_position = goal_position3,
             obstacle_position = obstacle_position,
@@ -288,103 +260,18 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
 
         result = get_receding_horizon_solution(θ, ii; warmstart_solution)
         warmstart_solution = nothing
+        
         if isnothing(result)
             strategy = nothing
         else
             strategy = result.strategies
         end
 
-        # If not solved, then continue to next problem instance (#5 cannot)
+        # If not solved, then continue to next problem instance
         if isnothing(strategy)
-            push!(GOOP_not_converged, ii)
+            push!(Baseline_not_converged, ii)
             continue
         else
-            # Check if the solution is an equilibrium
-            count_equilibrium_goop = 0
-            goop_z = BlockArray(
-                mapreduce(vcat, 1:num_players) do i
-                    mapreduce(vcat, 1:planning_horizon) do k
-                        vcat(strategy[i].xs[k], strategy[i].us[k])
-                    end
-            end, fill(primal_dimension, num_players))
-
-            θ_blocked = BlockArray(θ, fill(Int(length(θ)/num_players), num_players))
-
-            @showprogress desc="  Checking equilibrium..." for jj in 1:num_perturb
-                perturbed_x = [[strategy[1].xs[1]], [strategy[2].xs[1]], [strategy[3].xs[1]]]
-                perturbed_u = [[], [], []]
-
-                for kk in 1:num_players
-                    println("   Checking x*...@perturbation #$jj, player#$kk")
-
-                    perturbed_z_block = []
-                    check_inequality, check_shared_equality, check_shared_inequality = false, false, false
-                    while !(check_inequality && check_shared_equality && check_shared_inequality)
-                        # Step 1: Perturb control sequence u by ω = rand(dist, n_size) and generate perturbed trajectory x
-                        for i in 1:planning_horizon-1
-                            local u = strategy[kk].us[i] + rand(dist, control_dim(dynamics))
-                            push!(perturbed_u[kk], u)
-                            push!(perturbed_x[kk], dynamics(perturbed_x[kk][i], u))
-                        end
-                        push!(perturbed_u[kk], [0.0, 0.0])
-
-                        # Step 2: Check if the perturbed trajectory x satisfies shared constraints and inequality constraints
-                        # Rejection sampling. Feasible perturbations.Fix others' strategy constant and perturb one player's strategy
-                        perturbed_z_block = mapreduce(vcat, 1:planning_horizon) do i
-                            vcat(perturbed_x[kk][i], perturbed_u[kk][i])
-                        end
-                        check_inequality = all(inequality_constraints[kk](perturbed_z_block, θ_blocked) .≥ -tol)
-
-                        perturbed_z = let
-                            z_temp = copy(goop_z)
-                            z = blocks(z_temp)
-                            z[kk] = perturbed_z_block
-                            mortar(z)
-                        end
-                        check_shared_inequality = all(shared_inequality_constraints(perturbed_z, θ_blocked) .≥ -tol)
-                        check_shared_equality = all(shared_equality_constraints(perturbed_z, θ_blocked) .== 0.0)
-
-                        # Initialize perturbed trajectory for next iteration
-                        perturbed_x = [[strategy[1].xs[1]], [strategy[2].xs[1]], [strategy[3].xs[1]]]
-                        perturbed_u = [[], [], []]
-                    end
-
-                    # Step 3: Check if f₃(x*, θ) < f₃(x, θ) in the neighborhood of x*
-                    f₃_star = sum(max.(0, -prioritized_preferences[kk][1](goop_z[Block(kk)], θ_blocked)))
-                    f₃ = sum(max.(0, -prioritized_preferences[kk][1](perturbed_z_block, θ_blocked)))
-                    if f₃_star < f₃
-                        println("    f₃(x*, θ) < f₃(x, θ) in the neighborhood of x* for player #$kk")
-                    elseif isapprox(f₃_star, f₃, atol = tol)
-                        println("    f₃(x*, θ) close to f₃(x, θ) for player #$kk")
-                        println("    |f₃(x*, θ) - f₃(x, θ)| = $(abs(f₃_star - f₃))")
-
-                        # Step 4: Check if f₂(x*, θ) > f₂(x, θ) in the neighborhood of x*
-                        f₂_star = sum(max.(0, -prioritized_preferences[kk][2](goop_z[Block(kk)], θ_blocked)))
-                        f₂ = sum(max.(0, -prioritized_preferences[kk][2](perturbed_z_block, θ_blocked)))
-                        if f₂_star < f₂
-                            println("    f₂(x*, θ) < f₂(x, θ) in the neighborhood of x* for player #$kk")
-                        elseif isapprox(f₂_star, f₂, atol = tol)
-                            println("    f₂(x*, θ) close to f₂(x, θ) for player #$kk")
-                            println("    |f₂(x*, θ) - f₂(x, θ)| = $(abs(f₂_star - f₂))")
-                        else
-                            println("    f₂(x*, θ) > f₂(x, θ) SOMETHING IS WRONG for player #$kk")
-                        end
-                    else
-                        println("    f₃(x*, θ) > f₃(x, θ) SOMETHING IS WRONG for player #$kk")
-                    end
-
-                    # Step 5: Check if x* is an equilibrium
-                    if f₃_star < f₃ || (isapprox(f₃_star, f₃, atol = tol) && (f₂_star < f₂ || isapprox(f₂_star, f₂, atol = tol)))
-                        println("   x* is a GOOP equilibrium...@perturbation #$jj for player #$kk")
-                        count_equilibrium_goop += 1
-                    else
-                        println("   x* is not a GOOP equilibrium...@perturbation #$jj for player #$kk")
-                    end
-                end
-            end
-            # Check goop equilibrium data
-            println("goop soln for prob #$ii is equilibrium in ", count_equilibrium_goop/num_players, " cases (out of $num_perturb)")
-            push!(equilibrium_tally_goop, count_equilibrium_goop/num_players)
 
             # Store speed data for Highway
             horizontal_speed_data = Vector{Vector{Float64}}[]
@@ -396,7 +283,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
             # Store openloop speed data
             push!(horizontal_speed_data, [vcat(strategy[1].xs...)[3:4:end], vcat(strategy[2].xs...)[3:4:end], vcat(strategy[3].xs...)[3:4:end]])
             push!(vertical_speed_data, [vcat(strategy[1].xs...)[4:4:end], vcat(strategy[2].xs...)[4:4:end], vcat(strategy[3].xs...)[4:4:end]])
-        
+
             # Store openloop distance data
             push!(openloop_distance1, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
             push!(openloop_distance2, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
@@ -419,7 +306,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
             CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][3], label = "Vehicle 3", color = :green)
             CairoMakie.lines!(ax3, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
 
-            CairoMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_speed_$ii" * ".png", fig)
+            CairoMakie.save("./data/relaxably_feasible/Baseline_plots/" * "rfp_baseline_speed_$ii" * ".png", fig)
             fig
 
             # Visualize distance bw vehicles , limits = (nothing, (collision_avoidance-0.05, 0.4)) 
@@ -431,17 +318,14 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
             CairoMakie.lines!(ax4, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
             fig[2,1] = CairoMakie.Legend(fig, ax4, framevisible = false, orientation = :horizontal)
 
-            CairoMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_distance_$ii" * ".png", fig)
+            CairoMakie.save("./data/relaxably_feasible/Baseline_plots/" * "rfp_baseline_distance_$ii" * ".png", fig)
             fig
         end
     end
 
     # Save not-converged instances
-    JLD2.save_object("./data/rfp_GOOP_not_converged.jld2", GOOP_not_converged)
+    JLD2.save_object("./data/rfp_baseline_not_converged.jld2", Baseline_not_converged)
 
-    # Save equilibrium tally
-    JLD2.save_object("./data/relaxably_feasible/GOOP_solution/rfp_equilibrium.jld2", equilibrium_tally_goop)
-    println("equilibrium tally: ", equilibrium_tally_goop)
 end
 
 end

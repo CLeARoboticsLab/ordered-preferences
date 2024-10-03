@@ -128,7 +128,7 @@ function ParametricOrderedPreferencesMPCCGame(;
 
             # store private_slacks
             x_temp = let
-                Symbolics.scalarize(only(Symbolics.@variables(z̃[1:total_dimension+start_idx+1])))
+                Symbolics.scalarize(only(Symbolics.@variables(z̃[1:total_dimension+start_idx+1]))) #TODO: Check +1?
             end
             sum_slacks = Symbolics.build_function(sum(slacks_ii), x_temp, θ, expression=Val{false})
             push!(private_slacks, sum_slacks)
