@@ -34,7 +34,7 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
     objectives = [
         function (z, θ)
             (; xs, us) = unflatten_trajectory(z[Block(i)], state_dimension, control_dimension)
-            sum(sum(u .^ 2) for u in us)
+            0.5*sum(sum(u .^ 2) for u in us)
         end
         for i in 1:num_players
     ]
@@ -178,7 +178,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
     # Algorithm setting
     ϵ = 1.1
     κ = 0.1
-    max_iterations = 6 # 6
+    max_iterations = 9 # 6
     tolerance = 5e-2
     relaxation_mode = :standard
 
@@ -231,7 +231,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
             strategies = mapreduce(vcat, 1:num_players) do i
                 unflatten_trajectory(solution[min_residual_idx].primals[i][1:primal_dimension], state_dim(dynamics), control_dim(dynamics))
             end
-
+            # Main.@infiltrate
             # Save solution
             solution_dict = Dict(
                 "residual" => residual[min_residual_idx],
@@ -248,7 +248,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
     end
 
     # Run the experiment
-    @showprogress desc="Running problem instances..." for ii in 1:num_samples
+    @showprogress desc="Running problem instances..." for ii in 2:num_samples
         # Load problem data
         problem_data = JLD2.load_object("./data/relaxably_feasible/problem/rfp_$ii.jld2")
 

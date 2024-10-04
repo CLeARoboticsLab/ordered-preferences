@@ -117,7 +117,7 @@ function ParametricOrderedPreferencesMPCCGame(;
 
             slacks_ii = last(z[Block(1)], slack_dimension_ii)
 
-            objective_ii = 0.1*sum(slacks_ii)
+            objective_ii = sum(slacks_ii)
 
             # auxillary constraint: fᵢ(x,θ) + sᵢ ≥ 0 
             auxillary_constraints = prioritized_constraints_ii(x, θ) .+ slacks_ii
@@ -376,8 +376,8 @@ function solve(
         nms_memory_size = 16000,
         nms_mstep_frequency = 3000,
         lemke_start_type = "advanced",
-        restart_limit = 100,
-        gradient_step_limit = 100,
+        restart_limit = 120,
+        gradient_step_limit = 120,
         use_basics = true,
         use_start = true,
     )
@@ -420,7 +420,7 @@ function solve_relaxed_pop_game(
 
     complementarity_residual = 1.0
     converged_tolerance = 1e-6
-    PATH_tolerance = 1e-2
+    PATH_tolerance = 2e-2
 
     relaxations = ϵ * κ.^(0:max_iterations) # [1.0, 0.1, 0.01, ... 1e-10]
     ii = 1
