@@ -216,7 +216,6 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_KKT_base
                 strategies = mapreduce(vcat, 1:num_players) do i
                     unflatten_trajectory(solution.primals[i][1:primal_dimension], state_dim(dynamics), control_dim(dynamics))
                 end
-                Main.@infiltrate
                 println("slacks: ", solution.slacks)
                 # Save solution
                 solution_dict = Dict(
