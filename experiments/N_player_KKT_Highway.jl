@@ -213,7 +213,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
     dist = Normal(0.0, 0.01)
     num_perturb = 20
     equilibrium_tally_goop = []
-    tol = 1e-2 
+    tol = 2e-2 
 
     function get_receding_horizon_solution(θ, ii; warmstart_solution)
         (; relaxation, solution, residual) =

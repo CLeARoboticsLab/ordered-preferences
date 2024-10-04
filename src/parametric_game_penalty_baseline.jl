@@ -43,7 +43,7 @@ function ParametricGamePenalty(;
     parameter_dimensions,
     shared_equality_dimension,
     shared_inequality_dimension,
-    penalty_factors
+    penalty_weights
 )
     @assert !isnothing(equality_constraints)
     @assert !isnothing(inequality_constraints)
@@ -90,9 +90,9 @@ function ParametricGamePenalty(;
 
         # Define objective with penalty terms.
         if priority_level == 1
-            append!(objectives_w_penalty, penalty_factors[player_idx][num_levels]*objectives[player_idx](x, θ))
+            append!(objectives_w_penalty, penalty_weights[player_idx][num_levels]*objectives[player_idx](x, θ))
         end
-        objectives_w_penalty[player_idx] += penalty_factors[player_idx][priority_level]*sum(slacks_ii)
+        objectives_w_penalty[player_idx] += penalty_weights[player_idx][priority_level]*sum(slacks_ii)
 
         # Append auxillary constraints into inequality constraints: fᵢ(x,θ) + sᵢ ≥ 0 , sᵢ ≥ 0
         auxillary_constraints = prioritized_constraints_ii(x, θ) .+ slacks_ii

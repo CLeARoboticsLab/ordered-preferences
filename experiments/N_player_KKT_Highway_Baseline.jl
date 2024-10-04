@@ -8,7 +8,7 @@ using JLD2, ProgressMeter
 
 using OrderedPreferences
 
-function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 20, collision_avoidance = 0.2)
+function get_setup(num_players, penalty_weights; dynamics = UnicycleDynamics, planning_horizon = 20, collision_avoidance = 0.2)
     state_dimension = state_dim(dynamics)
     control_dimension = control_dim(dynamics)
     primals_per_agent = (state_dimension + control_dimension) * planning_horizon
@@ -134,13 +134,6 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
     # Specify prioritized constraint
     is_prioritized_constraint = [[true, true], [true, true], [true, true]]
 
-    # Specify penalty factors [innermost level, second level, outermost level]
-    penalty_factors = [
-        [100.0, 10.0, 1.0],
-        [100.0, 10.0, 1.0],
-        [100.0, 10.0, 1.0]
-    ]
-
     # Shared constraints
     function shared_equality_constraints(z, θ)
         [0]
@@ -173,7 +166,7 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
         parameter_dimensions,
         shared_equality_dimension,
         shared_inequality_dimension,
-        penalty_factors
+        penalty_weights
     )
 
     (; problem, flatten_parameters, unflatten_parameters)
@@ -186,146 +179,169 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_KKT_base
     obstacle_radius = 0.25
     collision_avoidance = 0.2
 
-    # TODO: Make this for all penalty weights 
-
-    (; problem, flatten_parameters) = get_setup(num_players; dynamics, planning_horizon, collision_avoidance)
-
-    warmstart_solution = nothing
-
-    dynamics_dimension = state_dim(dynamics) + control_dim(dynamics)
-    primal_dimension = dynamics_dimension * planning_horizon
-
-    # Common obstacle
-    obstacle_position = [0.25, 0.15]
-
-    # Tracking not-converged instances
-    Baseline_not_converged = []
-
-    function get_receding_horizon_solution(θ, ii; warmstart_solution)
-        solution = solve_penalty(problem, θ; initial_guess = warmstart_solution, verbose, return_primals = true)
-        strategies = mapreduce(vcat, 1:num_players) do i
-            unflatten_trajectory(solution.primals[i][1:primal_dimension], state_dim(dynamics), control_dim(dynamics))
-        end
-
-        # Save solution
-        solution_dict = Dict(
-            "slacks" => solution.slacks,
-            "strategy1" => strategies[1],
-            "strategy2" => strategies[2],
-            "strategy3" => strategies[3],
-        )
-        JLD2.save_object("./data/relaxably_feasible/Baseline_solution/rfp_$ii"*"_sol.jld2", solution_dict)
-
-        (; strategies, solution)
-    end
+    penalties = [# 1, δ, δ²
+        [1.0, 1.0, 1.0],        # δ = 1
+        [4.0, 2.0, 1.0],        # δ = 2
+        [16.0, 4.0, 1.0 ],      # δ = 4
+        [100.0, 10.0, 1.0],     # δ = 10
+        [400.0, 20.0, 1.0],     # δ = 20
+        [1600.0, 40.0, 1.0],    # δ = 40
+        [10000.0, 100.0, 1.0],  # δ = 100
+    ]
 
     # Run the baseline experiment
     @showprogress desc="Running problem instances using baseline..." for ii in 1:num_samples
-        # Load problem data
-        problem_data = JLD2.load_object("./data/relaxably_feasible/problem/rfp_$ii"*".jld2")
+        penalty_cnt = 1
+        println("-----------------------------------------------------")
+        for penalty in penalties
+            println("Running for penalty weights: ", penalty)
+            penalty_weights = [penalty for _ in 1:num_players]
 
-        # Player 1
-        initial_state1 = problem_data["initial_state1"] # (px, py, vx, vy)
-        goal_position1 = [0.9, 0.0]
-        θ1 = flatten_parameters(; # θ is a flat (column) vector of parameters
-            initial_state = initial_state1,
-            goal_position = goal_position1,
-            obstacle_position = obstacle_position,
-        )
+            # Define problem 
+            (; problem, flatten_parameters) = get_setup(num_players, penalty_weights; dynamics, planning_horizon, collision_avoidance)
 
-        # Player 2
-        initial_state2 = problem_data["initial_state2"]
-        goal_position2 = [0.9, 0.0]
-        θ2 = flatten_parameters(;
-            initial_state = initial_state2,
-            goal_position = goal_position2,
-            obstacle_position = obstacle_position,
-        )
-
-        # Player 3 
-        initial_state3 = problem_data["initial_state3"]
-        goal_position3 = [0.9, 0.0]
-        θ3 = flatten_parameters(;
-            initial_state = initial_state3,
-            goal_position = goal_position3,
-            obstacle_position = obstacle_position,
-        )
-
-        θ = [θ1..., θ2..., θ3...]
-
-        println("Solving problem instance #$ii...")
-        println("initial_state1:", initial_state1)
-        println("initial_state2:", initial_state2)
-        println("initial_state3:", initial_state3)
-
-        result = get_receding_horizon_solution(θ, ii; warmstart_solution)
-        warmstart_solution = nothing
+            warmstart_solution = nothing
         
-        if isnothing(result)
-            strategy = nothing
-        else
-            strategy = result.strategies
-        end
+            dynamics_dimension = state_dim(dynamics) + control_dim(dynamics)
+            primal_dimension = dynamics_dimension * planning_horizon
+        
+            # Common obstacle
+            obstacle_position = [0.25, 0.15]
+        
+            # Tracking not-converged instances
+            Baseline_not_converged = []
+    
+            function get_receding_horizon_solution(θ, ii, penalty_cnt; warmstart_solution)
+                solution = solve_penalty(problem, θ; initial_guess = warmstart_solution, verbose, return_primals = true)
+                strategies = mapreduce(vcat, 1:num_players) do i
+                    unflatten_trajectory(solution.primals[i][1:primal_dimension], state_dim(dynamics), control_dim(dynamics))
+                end
+                Main.@infiltrate
+                println("slacks: ", solution.slacks)
+                # Save solution
+                solution_dict = Dict(
+                    "slacks" => solution.slacks,
+                    "strategy1" => strategies[1],
+                    "strategy2" => strategies[2],
+                    "strategy3" => strategies[3],
+                )
+                JLD2.save_object("./data/relaxably_feasible/Baseline_solution/$penalty_cnt/rfp_$ii"*"_sol.jld2", solution_dict)
+        
+                (; strategies, solution)
+            end
+    
+            # Load problem data
+            problem_data = JLD2.load_object("./data/relaxably_feasible/problem/rfp_$ii"*".jld2")
+    
+            # Player 1
+            initial_state1 = problem_data["initial_state1"] # (px, py, vx, vy)
+            goal_position1 = [0.9, 0.0]
+            θ1 = flatten_parameters(; # θ is a flat (column) vector of parameters
+                initial_state = initial_state1,
+                goal_position = goal_position1,
+                obstacle_position = obstacle_position,
+            )
+    
+            # Player 2
+            initial_state2 = problem_data["initial_state2"]
+            goal_position2 = [0.9, 0.0]
+            θ2 = flatten_parameters(;
+                initial_state = initial_state2,
+                goal_position = goal_position2,
+                obstacle_position = obstacle_position,
+            )
+    
+            # Player 3 
+            initial_state3 = problem_data["initial_state3"]
+            goal_position3 = [0.9, 0.0]
+            θ3 = flatten_parameters(;
+                initial_state = initial_state3,
+                goal_position = goal_position3,
+                obstacle_position = obstacle_position,
+            )
+    
+            θ = [θ1..., θ2..., θ3...]
+    
+            println("Solving problem instance #$ii using baseline #$penalty_cnt...")
+            println("initial_state1:", initial_state1)
+            println("initial_state2:", initial_state2)
+            println("initial_state3:", initial_state3)
+    
+            result = get_receding_horizon_solution(θ, ii, penalty_cnt; warmstart_solution)
+            warmstart_solution = nothing
+            
+            if isnothing(result)
+                strategy = nothing
+            else
+                strategy = result.strategies
+            end
+    
+            # If not solved, then continue to next problem instance
+            if isnothing(strategy)
+                push!(Baseline_not_converged, ii)
+                continue
+            else
+    
+                # Store speed data for Highway
+                horizontal_speed_data = Vector{Vector{Float64}}[]
+                vertical_speed_data = Vector{Vector{Float64}}[]
+                openloop_distance1 = Vector{Float64}[]
+                openloop_distance2 = Vector{Float64}[]
+                openloop_distance3 = Vector{Float64}[]
+    
+                # Store openloop speed data
+                push!(horizontal_speed_data, [vcat(strategy[1].xs...)[3:4:end], vcat(strategy[2].xs...)[3:4:end], vcat(strategy[3].xs...)[3:4:end]])
+                push!(vertical_speed_data, [vcat(strategy[1].xs...)[4:4:end], vcat(strategy[2].xs...)[4:4:end], vcat(strategy[3].xs...)[4:4:end]])
+    
+                # Store openloop distance data
+                push!(openloop_distance1, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+                push!(openloop_distance2, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+                push!(openloop_distance3, [sqrt(sum((strategy[2].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+    
+                # Visualize horizontal speed
+                T = 1
+                fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
+                ax2 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "speed", title = "Horizontal Speed")
+                CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][1], label = "Vehicle 1", color = :blue)
+                CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][2], label = "Vehicle 2", color = :red)
+                CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][3], label = "Vehicle 3", color = :green)
+                CairoMakie.lines!(ax2, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+                fig[2,1:2] = CairoMakie.Legend(fig, ax2, framevisible = false, orientation = :horizontal)
+    
+                # Visualize vertical speed
+                ax3 = CairoMakie.Axis(fig[1, 2]; xlabel = "time step", ylabel = "speed", title = "Vertical Speed")
+                CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][1], label = "Vehicle 1", color = :blue)
+                CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][2], label = "Vehicle 2", color = :red)
+                CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][3], label = "Vehicle 3", color = :green)
+                CairoMakie.lines!(ax3, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+    
+                CairoMakie.save("./data/relaxably_feasible/Baseline_plots/$penalty_cnt/" * "rfp_baseline_speed_$ii" * ".png", fig)
+                fig
+    
+                # Visualize distance bw vehicles , limits = (nothing, (collision_avoidance-0.05, 0.4)) 
+                fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
+                ax4 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "distance", title = "Distance bw vehicles")
+                CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance1[T], label = "B/w Agent 1 & Agent 2", color = :black, marker = :star5, markersize = 20)
+                CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance2[T], label = "B/w Agent 1 & Agent 3", color = :orange, marker = :diamond, markersize = 20)
+                CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance3[T], label = "B/w Agent 2 & Agent 3", color = :purple, marker = :circle, markersize = 20)
+                CairoMakie.lines!(ax4, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+                fig[2,1] = CairoMakie.Legend(fig, ax4, framevisible = false, orientation = :horizontal)
+    
+                CairoMakie.save("./data/relaxably_feasible/Baseline_plots/$penalty_cnt/" * "rfp_baseline_distance_$ii" * ".png", fig)
+                fig
+            end
 
-        # If not solved, then continue to next problem instance
-        if isnothing(strategy)
-            push!(Baseline_not_converged, ii)
-            continue
-        else
+            # Save not-converged instances
+            JLD2.save_object("./data/rfp_baseline_not_converged"*"_$penalty_cnt"*".jld2", Baseline_not_converged)
+        
+            # Update penalty_cnt
+            penalty_cnt += 1
 
-            # Store speed data for Highway
-            horizontal_speed_data = Vector{Vector{Float64}}[]
-            vertical_speed_data = Vector{Vector{Float64}}[]
-            openloop_distance1 = Vector{Float64}[]
-            openloop_distance2 = Vector{Float64}[]
-            openloop_distance3 = Vector{Float64}[]
-
-            # Store openloop speed data
-            push!(horizontal_speed_data, [vcat(strategy[1].xs...)[3:4:end], vcat(strategy[2].xs...)[3:4:end], vcat(strategy[3].xs...)[3:4:end]])
-            push!(vertical_speed_data, [vcat(strategy[1].xs...)[4:4:end], vcat(strategy[2].xs...)[4:4:end], vcat(strategy[3].xs...)[4:4:end]])
-
-            # Store openloop distance data
-            push!(openloop_distance1, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-            push!(openloop_distance2, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-            push!(openloop_distance3, [sqrt(sum((strategy[2].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-
-            # Visualize horizontal speed
-            T = 1
-            fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
-            ax2 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "speed", title = "Horizontal Speed")
-            CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][1], label = "Vehicle 1", color = :blue)
-            CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][2], label = "Vehicle 2", color = :red)
-            CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][3], label = "Vehicle 3", color = :green)
-            CairoMakie.lines!(ax2, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
-            fig[2,1:2] = CairoMakie.Legend(fig, ax2, framevisible = false, orientation = :horizontal)
-
-            # Visualize vertical speed
-            ax3 = CairoMakie.Axis(fig[1, 2]; xlabel = "time step", ylabel = "speed", title = "Vertical Speed")
-            CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][1], label = "Vehicle 1", color = :blue)
-            CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][2], label = "Vehicle 2", color = :red)
-            CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][3], label = "Vehicle 3", color = :green)
-            CairoMakie.lines!(ax3, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
-
-            CairoMakie.save("./data/relaxably_feasible/Baseline_plots/" * "rfp_baseline_speed_$ii" * ".png", fig)
-            fig
-
-            # Visualize distance bw vehicles , limits = (nothing, (collision_avoidance-0.05, 0.4)) 
-            fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
-            ax4 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "distance", title = "Distance bw vehicles")
-            CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance1[T], label = "B/w Agent 1 & Agent 2", color = :black, marker = :star5, markersize = 20)
-            CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance2[T], label = "B/w Agent 1 & Agent 3", color = :orange, marker = :diamond, markersize = 20)
-            CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance3[T], label = "B/w Agent 2 & Agent 3", color = :purple, marker = :circle, markersize = 20)
-            CairoMakie.lines!(ax4, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
-            fig[2,1] = CairoMakie.Legend(fig, ax4, framevisible = false, orientation = :horizontal)
-
-            CairoMakie.save("./data/relaxably_feasible/Baseline_plots/" * "rfp_baseline_distance_$ii" * ".png", fig)
-            fig
+            # Reset
+            Baseline_not_converged = []
         end
     end
-
-    # Save not-converged instances
-    JLD2.save_object("./data/rfp_baseline_not_converged.jld2", Baseline_not_converged)
-
+    
 end
 
 end
