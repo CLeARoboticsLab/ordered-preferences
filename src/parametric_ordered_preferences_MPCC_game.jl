@@ -366,7 +366,7 @@ function solve(
         parameter_value;
         initial_guess = z0,
         verbose = verbose,
-        cumulative_iteration_limit = 400000,
+        cumulative_iteration_limit = 500000,
         proximal_perturbation = 1e-2,
         major_iteration_limit = 10000,
         minor_iteration_limit = 15000,
@@ -376,7 +376,7 @@ function solve(
         nms_memory_size = 16000,
         nms_mstep_frequency = 3000,
         lemke_start_type = "advanced",
-	lemke_rank_deficiency_iterations = 50,
+	    lemke_rank_deficiency_iterations = 50,
         restart_limit = 120,
         gradient_step_limit = 120,
         use_basics = true,
