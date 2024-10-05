@@ -178,8 +178,8 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
     # Algorithm setting
     ϵ = 1.1
     κ = 0.1
-    max_iterations = 9 # 6
-    tolerance = 5e-2
+    max_iterations = 9
+    tolerance = 5e-1 # 5e-1로 변경
     relaxation_mode = :standard
 
     num_players = 3
@@ -231,7 +231,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
             strategies = mapreduce(vcat, 1:num_players) do i
                 unflatten_trajectory(solution[min_residual_idx].primals[i][1:primal_dimension], state_dim(dynamics), control_dim(dynamics))
             end
-            # Main.@infiltrate
+            Main.@infiltrate
             # Save solution
             solution_dict = Dict(
                 "residual" => residual[min_residual_idx],
