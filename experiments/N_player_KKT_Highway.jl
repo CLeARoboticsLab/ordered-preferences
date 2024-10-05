@@ -248,7 +248,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
     end
 
     # Run the experiment
-    @showprogress desc="Running problem instances..." for ii in 2:num_samples
+    @showprogress desc="Running problem instances..." for ii in 3:num_samples
         # Load problem data
         problem_data = JLD2.load_object("./data/relaxably_feasible/problem/rfp_$ii.jld2")
 
