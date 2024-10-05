@@ -179,7 +179,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_GOOP_v1.
     ϵ = 1.1
     κ = 0.1
     max_iterations = 9
-    tolerance = 5e-1 # 5e-1로 변경
+    tolerance = 2e-1 # 5e-1로 변경
     relaxation_mode = :standard
 
     num_players = 3
