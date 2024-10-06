@@ -179,7 +179,7 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
     ϵ = 1.1
     κ = 0.1
     max_iterations = 7
-    tolerance = 2e-1
+    tolerance = 1e-1
     relaxation_mode = :standard
 
     num_players = 3
