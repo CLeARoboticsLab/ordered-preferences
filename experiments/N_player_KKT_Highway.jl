@@ -178,8 +178,8 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
     # Algorithm setting
     ϵ = 1.1
     κ = 0.1
-    max_iterations = 9
-    tolerance = 3e-1
+    max_iterations = 7
+    tolerance = 2e-1
     relaxation_mode = :standard
 
     num_players = 3
@@ -248,7 +248,7 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
     end
 
     # Run the experiment
-    @showprogress desc="Running problem instances..." for ii in 50:num_samples
+    @showprogress desc="Running problem instances..." for ii in 1:num_samples
         # Load problem data
         problem_data = JLD2.load_object("./data/relaxably_feasible/problem/rfp_$ii.jld2")
 
@@ -328,7 +328,6 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
                                 push!(perturbed_x[kk], dynamics(perturbed_x[kk][i], u))
                             end
                             push!(perturbed_u[kk], [0.0, 0.0])
-
                             # Step 2: Check if the perturbed trajectory x satisfies shared constraints and inequality constraints
                             # Rejection sampling. Feasible perturbations.Fix others' strategy constant and perturb one player's strategy
                             perturbed_z_block = mapreduce(vcat, 1:planning_horizon) do i
