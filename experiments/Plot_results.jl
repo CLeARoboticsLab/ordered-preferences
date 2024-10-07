@@ -2,8 +2,10 @@ module Plot_results
 
 using JLD2, CairoMakie
 
+# 8e-2: [100, 78, 71, 67, 64, 51, 46, 38]
 # 1e-1: [100, 78, 71, 67, 64,57, 51, 46, 38, 37, 20, 17]
 # 2e-1: [1, 10,13,16,17,20, 38, 39, 42, 46, 51, 55, 57, 64, 65, 67, 71, 75, 78, 96, 100]
+
 function plot_goop_vs_penalty(;num_samples=100, num_penalty=10)
 
     colors = 1:num_penalty
@@ -85,7 +87,7 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=10)
 
         CairoMakie.save("./data/relaxably_feasible/result_plots/rfp_GOOP_Baseline_Sum_Slacks_$ii" * ".pdf", fig, pt_per_unit = 1)
         fig
-        
+
         # Main.@infiltrate
         # Plot Monte Carlo result
 
