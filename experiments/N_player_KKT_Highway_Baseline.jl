@@ -226,6 +226,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_KKT_base
                     "strategy1" => strategies[1],
                     "strategy2" => strategies[2],
                     "strategy3" => strategies[3],
+                    "primals" => solution.primals,
                 )
                 JLD2.save_object("./data/relaxably_feasible/Baseline_solution/$penalty_cnt/rfp_$ii"*"_sol.jld2", solution_dict)
         
