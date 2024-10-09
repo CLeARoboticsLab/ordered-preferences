@@ -176,10 +176,10 @@ end
 
 function demo(; verbose = false, num_samples = 10, check_equilibrium = false, filename = "N_player_GOOP_v1.mp4")
     # Algorithm setting
-    ϵ = 11.0
+    ϵ = 1.1
     κ = 0.1
     max_iterations = 8
-    tolerance = 5e-2
+    tolerance = 8e-2
     relaxation_mode = :standard
 
     num_players = 3

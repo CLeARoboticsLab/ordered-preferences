@@ -167,7 +167,7 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=10)
     CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline" * ".pdf", fig, pt_per_unit = 1)
 
     # Plot Monte Carlo 3
-    Main.@infiltrate
+    # Main.@infiltrate
     for ii in 1:n_samples
         goop_slack[ii][goop_slack[ii] .< 0] .= 0.0
     end
@@ -195,6 +195,7 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=10)
     rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\tilde{s}^3_2 - s^3_2"), categories, delta_slack_player3_level2; cloud_width=1.2, boxplot_width=0.2, side=:right, violin_limits=extrema, color=colors_mc)
     CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_Monte_Carlo3_player3" * ".pdf", fig, pt_per_unit = 1)
     
+    # TODO: Plot Monte Carlo 4 for maximum violation
 end
 
 

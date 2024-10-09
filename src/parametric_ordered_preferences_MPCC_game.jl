@@ -367,11 +367,11 @@ function solve(
         initial_guess = z0,
         verbose = verbose,
         cumulative_iteration_limit = 500000,
-        proximal_perturbation = 1e-3,
+        proximal_perturbation = 1e-2,
         major_iteration_limit = 10000,
         minor_iteration_limit = 15000,
         convergence_tolerance = PATH_tolerance, #1e-1
-        nms_initial_reference_factor = 60000,
+        nms_initial_reference_factor = 50000,
         nms_maximum_watchdogs = 8000,
         nms_memory_size = 16000,
         nms_mstep_frequency = 5000,
@@ -421,7 +421,7 @@ function solve_relaxed_pop_game(
 
     complementarity_residual = 1.0
     converged_tolerance = 1e-6
-    PATH_tolerance = 5e-2 #2e-2
+    PATH_tolerance = 8e-2 #2e-2
 
     relaxations = ϵ * κ.^(0:max_iterations) # [1.0, 0.1, 0.01, ... 1e-10]
     ii = 1
