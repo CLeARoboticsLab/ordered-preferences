@@ -181,18 +181,20 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=10)
 
     desired_size = [18.2, 9.2] #cm, double column
     fig = CairoMakie.Figure(size = (desired_size[1]*cm_to_pt, desired_size[2]*cm_to_pt))
-    rainclouds!(CairoMakie.Axis(fig[1,1], title=L"\tilde{s}^1_3 - s^1_3"), categories, delta_slack_player1_level3; cloud_width=1.2, boxplot_width=0.2, side=:right, violin_limits=extrema, color=colors_mc)
-    rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\sum \tilde{s}^1_2 - s^1_2"), categories, delta_slack_player1_level2; cloud_width=1.2, boxplot_width=0.2, side=:right, violin_limits=extrema, color=colors_mc)
+    rainclouds!(CairoMakie.Axis(fig[1,1], title=L"\tilde{s}^1_3 - s^1_3"), categories, delta_slack_player1_level3; cloud_width=1.2, boxplot_width=0.2, side=:right, color=colors_mc)
+    rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\sum \tilde{s}^1_2 - s^1_2"), categories, delta_slack_player1_level2; cloud_width=1.2, boxplot_width=0.2, side=:right, color=colors_mc)
     CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_Monte_Carlo3_player1" * ".pdf", fig, pt_per_unit = 1)
 
+    Main.@infiltrate
+
     fig = CairoMakie.Figure(size = (desired_size[1]*cm_to_pt, desired_size[2]*cm_to_pt))
-    rainclouds!(CairoMakie.Axis(fig[1,1], title=L"\sum \tilde{s}^2_3 - s^2_3"), categories, delta_slack_player2_level3; cloud_width=1.2, boxplot_width=0.2, side=:right, violin_limits=extrema, color=colors_mc)
-    rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\tilde{s}^2_2 - s^2_2"), categories, delta_slack_player2_level2; cloud_width=1.2, boxplot_width=0.2, side=:right, violin_limits=extrema, color=colors_mc)
+    rainclouds!(CairoMakie.Axis(fig[1,1], title=L"\sum \tilde{s}^2_3 - s^2_3"), categories, delta_slack_player2_level3; cloud_width=1.2, boxplot_width=0.2, side=:right, color=colors_mc)
+    rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\tilde{s}^2_2 - s^2_2"), categories, delta_slack_player2_level2; cloud_width=1.2, boxplot_width=0.2, side=:right, color=colors_mc)
     CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_Monte_Carlo3_player2" * ".pdf", fig, pt_per_unit = 1)
     
     fig = CairoMakie.Figure(size = (desired_size[1]*cm_to_pt, desired_size[2]*cm_to_pt))
-    rainclouds!(CairoMakie.Axis(fig[1,1], title=L"\sum \tilde{s}^3_3 - s^3_3"), categories, delta_slack_player3_level3; cloud_width=1.2, boxplot_width=0.2, side=:right, violin_limits=extrema, color=colors_mc)
-    rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\tilde{s}^3_2 - s^3_2"), categories, delta_slack_player3_level2; cloud_width=1.2, boxplot_width=0.2, side=:right, violin_limits=extrema, color=colors_mc)
+    rainclouds!(CairoMakie.Axis(fig[1,1], title=L"\sum \tilde{s}^3_3 - s^3_3"), categories, delta_slack_player3_level3; cloud_width=1.2, boxplot_width=0.2, side=:right, color=colors_mc)
+    rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\tilde{s}^3_2 - s^3_2"), categories, delta_slack_player3_level2; cloud_width=1.2, boxplot_width=0.2, side=:right, color=colors_mc)
     CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_Monte_Carlo3_player3" * ".pdf", fig, pt_per_unit = 1)
     
     # TODO: Plot Monte Carlo 4 for maximum violation
