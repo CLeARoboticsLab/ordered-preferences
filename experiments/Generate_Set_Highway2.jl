@@ -199,8 +199,8 @@ function demo(; verbose = false)
         warmstart_solution = nothing
         ϵ = 0.02
         ii = 1
-        # Sample 10 instances from 10 selected problems
-        for i in [34, 46, 48, 52, 55, 61, 65, 73, 82, 94]
+        # Sample 11 instances from 9 selected problems
+        for i in [34, 48, 52, 55, 61, 65, 73, 82, 94]
             selected_problem = JLD2.load_object("./data/relaxably_feasible/selected_problem/rfp_$i.jld2")
             initial_y_pos1 = selected_problem["initial_state1"][2]
             initial_x_vel1 = selected_problem["initial_state1"][3]
