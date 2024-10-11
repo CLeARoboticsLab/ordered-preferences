@@ -218,7 +218,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_KKT_base
     
             function get_receding_horizon_solution(θ, ii, penalty_cnt; warmstart_solution)
                 solution = solve_penalty(problem, θ; initial_guess = warmstart_solution, verbose, return_primals = true)
-                Main.@infiltrate
+                
                 if string(solution.status) != "MCP_Solved"
                     println("Baseline #$penalty_cnt could not find a solution...moving on to the next problem")
                     return nothing
