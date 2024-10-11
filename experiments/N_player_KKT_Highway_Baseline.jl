@@ -186,12 +186,12 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_KKT_base
         [900.0, 30.0, 1.0],     # δ = 30
         [1600.0, 40.0, 1.0],    # δ = 40
         [2500.0, 50.0, 1.0],    # δ = 50
-        [3600.0, 60.0, 1.0],    # δ = 60
-        [4900.0, 70.0, 1.0],    # δ = 70
-        [6400.0, 80.0, 1.0],    # δ = 80
-        [8100.0, 90.0, 1.0],    # δ = 90
-        [10000.0, 100.0, 1.0],  # δ = 100
-        [1000000.0, 1000.0, 1.0],  # δ = 1000
+        # [3600.0, 60.0, 1.0],    # δ = 60
+        # [4900.0, 70.0, 1.0],    # δ = 70
+        # [6400.0, 80.0, 1.0],    # δ = 80
+        # [8100.0, 90.0, 1.0],    # δ = 90
+        # [10000.0, 100.0, 1.0],  # δ = 100
+        # [1000000.0, 1000.0, 1.0],  # δ = 1000
         ]
 
     # Run the baseline experiment
@@ -282,6 +282,7 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_KKT_base
             warmstart_solution = nothing
             
             if isnothing(result)
+                push!(Baseline_not_converged, ii)
                 strategy = nothing
             else
                 strategy = result.strategies
