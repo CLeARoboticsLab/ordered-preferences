@@ -20,6 +20,9 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=10)
     goop_slack = Vector[]
     baseline_slack = Vector[]
 
+    goop_primals = Vector[]
+    baseline_primals = Vector[]
+
     cm_to_pt = 28.346456692913385
 
     @showprogress for ii in setdiff(1:num_samples, [17, 20, 37, 38, 46, 51, 57, 64, 67, 71, 78, 88, 90, 91, 100])#1:num_samples
@@ -28,7 +31,6 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=10)
         for jj in 1:num_penalty
             push!(baseline_data, load_object("data/relaxably_feasible/Baseline_solution/$jj/$filename"))
         end
-
         # Collect difference of slacks for each level
         push!(Δ_slacks_3,
         [sum(baseline_data[jj]["slacks"][1:2:end]) - sum(goop_data["slacks"][1:2:end]) for jj in 1:num_penalty])
@@ -38,6 +40,10 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=10)
         # Collect goop and baseline slacks
         push!(goop_slack, goop_data["slacks"])
         push!(baseline_slack, [baseline_data[jj]["slacks"] for jj in 1:num_penalty])
+
+        # Collect goop and baseline primal values
+        push!(goop_primals, goop_data["primals"])
+        push!(baseline_primals, [baseline_data[jj]["primals"] for jj in 1:num_penalty])
 
         # Plot for player 1
         desired_size = [20, 10] #cm, double column
@@ -167,7 +173,6 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=10)
     CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline" * ".pdf", fig, pt_per_unit = 1)
 
     # Plot Monte Carlo 3
-    # Main.@infiltrate
     for ii in 1:n_samples
         goop_slack[ii][goop_slack[ii] .< 0] .= 0.0
     end
@@ -185,8 +190,6 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=10)
     rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\sum \tilde{s}^1_2 - s^1_2"), categories, delta_slack_player1_level2; cloud_width=1.2, boxplot_width=0.2, side=:right, color=colors_mc)
     CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_Monte_Carlo3_player1" * ".pdf", fig, pt_per_unit = 1)
 
-    Main.@infiltrate
-
     fig = CairoMakie.Figure(size = (desired_size[1]*cm_to_pt, desired_size[2]*cm_to_pt))
     rainclouds!(CairoMakie.Axis(fig[1,1], title=L"\sum \tilde{s}^2_3 - s^2_3"), categories, delta_slack_player2_level3; cloud_width=1.2, boxplot_width=0.2, side=:right, color=colors_mc)
     rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\tilde{s}^2_2 - s^2_2"), categories, delta_slack_player2_level2; cloud_width=1.2, boxplot_width=0.2, side=:right, color=colors_mc)
@@ -197,7 +200,33 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=10)
     rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\tilde{s}^3_2 - s^3_2"), categories, delta_slack_player3_level2; cloud_width=1.2, boxplot_width=0.2, side=:right, color=colors_mc)
     CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_Monte_Carlo3_player3" * ".pdf", fig, pt_per_unit = 1)
     
-    # TODO: Plot Monte Carlo 4 for maximum violation
+    # Plot Monte Carlo 4 for maximum violation
+    Main.@infiltrate
+    # Issue: not getting numerically zero values for some slacks ex) maximum(vcat(goop_primals[ii]...)[320:339])
+    max_slack_player1_level3 = [vcat(baseline_primals[ii][jj]...)[31]-vcat(goop_primals[ii]...)[31] for ii in 1:n_samples for jj in 1:num_penalty]
+    max_slack_player1_level2 = [maximum(vcat(baseline_primals[ii][jj]...)[32:51])-maximum(vcat(goop_primals[ii]...)[94:113]) for ii in 1:n_samples for jj in 1:num_penalty]
+    
+    max_slack_player2_level3 = [maximum(vcat(baseline_primals[ii][jj]...)[82:101])-maximum(vcat(goop_primals[ii]...)[320:339]) for ii in 1:n_samples for jj in 1:num_penalty]
+    max_slack_player2_level2 = [vcat(baseline_primals[ii][jj]...)[102]-vcat(goop_primals[ii]...)[440] for ii in 1:n_samples for jj in 1:num_penalty]
+    
+    max_slack_player3_level3 = [maximum(vcat(baseline_primals[ii][jj]...)[133:152])-maximum(vcat(goop_primals[ii]...)[704:723]) for ii in 1:n_samples for jj in 1:num_penalty]
+    max_slack_player3_level2 = [vcat(baseline_primals[ii][jj]...)[153]-vcat(goop_primals[ii]...)[824] for ii in 1:n_samples for jj in 1:num_penalty]
+
+    desired_size = [18.2, 9.2] #cm, double column
+    fig = CairoMakie.Figure(size = (desired_size[1]*cm_to_pt, desired_size[2]*cm_to_pt))
+    rainclouds!(CairoMakie.Axis(fig[1,1], title=L"\tilde{s}^1_3 - s^1_3"), categories, max_slack_player1_level3; cloud_width=1.2, boxplot_width=0.2, side=:right, color=colors_mc)
+    rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\max \tilde{s}^1_2 - s^1_2"), categories, max_slack_player1_level2; cloud_width=1.2, boxplot_width=0.2, side=:right, color=colors_mc)
+    CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_Monte_Carlo4_max_player1" * ".pdf", fig, pt_per_unit = 1)
+
+    fig = CairoMakie.Figure(size = (desired_size[1]*cm_to_pt, desired_size[2]*cm_to_pt))
+    rainclouds!(CairoMakie.Axis(fig[1,1], title=L"\max \tilde{s}^2_3 - s^2_3"), categories, max_slack_player2_level3; cloud_width=1.2, boxplot_width=0.2, side=:right, color=colors_mc)
+    rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\tilde{s}^2_2 - s^2_2"), categories, max_slack_player2_level2; cloud_width=1.2, boxplot_width=0.2, side=:right, color=colors_mc)
+    CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_Monte_Carlo4_max_player2" * ".pdf", fig, pt_per_unit = 1)
+    
+    fig = CairoMakie.Figure(size = (desired_size[1]*cm_to_pt, desired_size[2]*cm_to_pt))
+    rainclouds!(CairoMakie.Axis(fig[1,1], title=L"\max \tilde{s}^3_3 - s^3_3"), categories, max_slack_player3_level3; cloud_width=1.2, boxplot_width=0.2, side=:right, color=colors_mc)
+    rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\tilde{s}^3_2 - s^3_2"), categories, max_slack_player3_level2; cloud_width=1.2, boxplot_width=0.2, side=:right, color=colors_mc)
+    CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_Monte_Carlo4_max_player3" * ".pdf", fig, pt_per_unit = 1)
 end
 
 
