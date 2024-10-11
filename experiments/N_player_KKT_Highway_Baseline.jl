@@ -218,20 +218,25 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_KKT_base
     
             function get_receding_horizon_solution(θ, ii, penalty_cnt; warmstart_solution)
                 solution = solve_penalty(problem, θ; initial_guess = warmstart_solution, verbose, return_primals = true)
-                strategies = mapreduce(vcat, 1:num_players) do i
-                    unflatten_trajectory(solution.primals[i][1:primal_dimension], state_dim(dynamics), control_dim(dynamics))
+                if solution.status != "MCP_Solved"
+                    println("Baseline #$penalty_cnt could not find a solution...moving on to the next problem")
+                    return nothing
+                else
+                    strategies = mapreduce(vcat, 1:num_players) do i
+                        unflatten_trajectory(solution.primals[i][1:primal_dimension], state_dim(dynamics), control_dim(dynamics))
+                    end
+                    println("slacks: ", solution.slacks)
+                    # Save solution
+                    solution_dict = Dict(
+                        "slacks" => solution.slacks,
+                        "strategy1" => strategies[1],
+                        "strategy2" => strategies[2],
+                        "strategy3" => strategies[3],
+                        "primals" => solution.primals,
+                    )
+                    JLD2.save_object("./data/relaxably_feasible/Baseline_solution/$penalty_cnt/rfp_$ii"*"_sol.jld2", solution_dict)
                 end
-                println("slacks: ", solution.slacks)
-                # Save solution
-                solution_dict = Dict(
-                    "slacks" => solution.slacks,
-                    "strategy1" => strategies[1],
-                    "strategy2" => strategies[2],
-                    "strategy3" => strategies[3],
-                    "primals" => solution.primals,
-                )
-                JLD2.save_object("./data/relaxably_feasible/Baseline_solution/$penalty_cnt/rfp_$ii"*"_sol.jld2", solution_dict)
-        
+
                 (; strategies, solution)
             end
     
