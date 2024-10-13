@@ -325,9 +325,12 @@ function plot_trajectories(;num_samples = 100, num_penalty = 6)
         goop_strategy3 = Observable(goop_data["strategy3"])
 
         figure = GLMakie.Figure(size = (1000, 900)) #(5,4)
-        axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-0.5, 1), (-0.2, 0.2)), yticks = [-0.2, 0.2], xticks = [-0.5, 0.0, 1.0])
+        axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-0.5, 1), (-0.25, 0.25)), yticks = [-0.2, 0.2], xticks = [0.0, 1.0])
         axis.xgridvisible = false
         axis.ygridvisible = false
+        GLMakie.hidespines!(axis)
+        GLMakie.hidexdecorations!(axis, ticklabels = false)
+        GLMakie.hideydecorations!(axis, ticklabels = false)
 
         # visualize initial states (account for asynchronous update)
         GLMakie.scatter!(
@@ -363,9 +366,12 @@ function plot_trajectories(;num_samples = 100, num_penalty = 6)
         # 2. Plot Baseline
         for jj in 1:num_penalty
             push!(baseline_data, load_object("data/relaxably_feasible/Baseline_solution/$jj/$filename"))
-            axis = GLMakie.Axis(figure[1+jj, 1]; aspect = GLMakie.DataAspect(), limits = ((-0.5, 1), (-0.2, 0.2)), yticks = [-0.2, 0.2], xticks = [-0.5, 0.0, 1.0])
+            axis = GLMakie.Axis(figure[1+jj, 1]; aspect = GLMakie.DataAspect(), limits = ((-0.5, 1), (-0.25, 0.25)), yticks = [-0.2, 0.2], xticks = [0.0, 1.0])
             axis.xgridvisible = false
             axis.ygridvisible = false
+            GLMakie.hidespines!(axis)
+            GLMakie.hidexdecorations!(axis, ticklabels = false)
+            GLMakie.hideydecorations!(axis, ticklabels = false)
 
             baseline_strategy1 = Observable(baseline_data[jj]["strategy1"])
             baseline_strategy2 = Observable(baseline_data[jj]["strategy2"])
