@@ -4,12 +4,10 @@ using LinearAlgebra
 
 using ParametricMCPs: ParametricMCPs, ParametricMCP
 using Symbolics: Symbolics
-using BlockArrays: BlockArrays, BlockArray, Block
+using BlockArrays: BlockArrays, BlockArray, Block, blocks
+using DelimitedFiles: readdlm
 
-include("parametric_optimization_problem.jl")
-export ParametricOptimizationProblem, solve, total_dim
-
-include("parametric_ordered_preferences.jl")
-export ParametricOrderedPreferencesProblem, solve
+include("parametric_game_penalty_baseline.jl")
+export ParametricGamePenalty, solve_penalty, total_dim
 
 end # module OrderedPreferences
