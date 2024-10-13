@@ -1,4 +1,4 @@
-module N_player_KKT_Highway_Baseline
+module N_player_KKT_Plot_Trajectory
 
 using TrajectoryGamesExamples: UnicycleDynamics, planar_double_integrator
 using TrajectoryGamesBase:
@@ -200,12 +200,7 @@ function demo(; verbose = false, paused = false, filename = "N_player_KKT_baseli
         strategies = mapreduce(vcat, 1:num_players) do i
             unflatten_trajectory(solution.primals[i][1:primal_dimension], state_dim(dynamics), control_dim(dynamics))
         end
-        # Save primal solution as text file
-        open("solution_primals.txt", "w") do file
-            for vec in solution.primals
-                write(file, join(vec, ",") * "\n")
-            end
-        end
+
         # For later. 
         # sample_solution = open("solution_primals.txt") do file
         #    [parse.(Float64, split(line, ",")) for line in readlines(file)]
@@ -309,56 +304,8 @@ function demo(; verbose = false, paused = false, filename = "N_player_KKT_baseli
 
     Main.@infiltrate
 
-    # # Visualize trajectories
-    # strategy1 = GLMakie.@lift OpenLoopStrategy($strategy[1].xs, $strategy[1].us)
-    # strategy2 = GLMakie.@lift OpenLoopStrategy($strategy[2].xs, $strategy[2].us)
-    # strategy3 = GLMakie.@lift OpenLoopStrategy($strategy[3].xs, $strategy[3].us)
-    # GLMakie.plot!(axis, strategy1, color = :blue)
-    # GLMakie.plot!(axis, strategy2, color = :red)
-    # GLMakie.plot!(axis, strategy3, color = :green)
-
-    # # Store speed data for Highway
-    # openloop_speed_data = Vector{Vector{Float64}}[]
-    # openloop_distance1 = Vector{Float64}[]
-    # openloop_distance2 = Vector{Float64}[]
-    # openloop_distance3 = Vector{Float64}[]
-
-    # GLMakie.save("$filename"[1:end-4] * "_Open_Loop_path" * ".png", figure)
-    # display(figure)
-
-    # # Store openloop speed data
-    # push!(horizontal_speed_data, [vcat(strategy[][1].xs...)[3:4:end], vcat(strategy[][2].xs...)[3:4:end], vcat(strategy[][3].xs...)[3:4:end]])
-    # push!(vertical_speed_data, [vcat(strategy[][1].xs...)[4:4:end], vcat(strategy[][2].xs...)[4:4:end], vcat(strategy[][3].xs...)[4:4:end]])
-
-    # # Store openloop distance data
-    # push!(openloop_distance1, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-    # push!(openloop_distance2, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-    # push!(openloop_distance3, [sqrt(sum((strategy[][2].xs[k][1:2] - strategy[][3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-
-    # # Visualize horizontal speed
-    # T = 1
-    # fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
-    # ax2 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "speed", title = "Horizontal speed")
-    # CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][1], color = :blue)
-    # CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][2], color = :red)
-    # CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][3], color = :green)
-    # CairoMakie.lines!(ax2, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
-    
-    # # Visualize vertical speed #TODO
-    
-    # # Visualize (distance bw vehicles) , limits = (nothing, (collision_avoidance-0.05, 0.4)) 
-    # ax3 = CairoMakie.Axis(fig[1, 2]; xlabel = "time step", ylabel = "distance", title = "Distance between vehicles")
-    # CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, openloop_distance1[T], label = "B.w Agent 1 & Agent 2", color = :black, marker = :star5)
-    # CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, openloop_distance2[T], label = "B.w Agent 1 & Agent 3", color = :black, marker = :diamond)
-    # CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, openloop_distance3[T], label = "B.w Agent 2 & Agent 3", color = :black, marker = :circle)
-    # CairoMakie.lines!(ax3, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
-    # # TODO: CairoMakie.axislegend()
-
-    # # Main.@infiltrate
-    # # infil> @continue (to move on to next infilrate point)
-
-    # CairoMakie.save("$filename"[1:end-4] * "_Open_Loop" * ".png", fig)
-    # fig
 end
+
+
 
 end
