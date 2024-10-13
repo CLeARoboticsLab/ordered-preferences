@@ -4,7 +4,7 @@ using TrajectoryGamesExamples: UnicycleDynamics, planar_double_integrator
 using TrajectoryGamesBase:
     OpenLoopStrategy, unflatten_trajectory, state_dim, control_dim, control_bounds
 using GLMakie: GLMakie, Observable
-using BlockArrays, JLD2, ProgressMeter
+using BlockArrays, JLD2, ProgressMeter, MathTeXEngine
 
 using OrderedPreferences
 
@@ -296,7 +296,6 @@ function demo(; verbose = false, paused = false, filename = "N_player_KKT_baseli
     strategy2 = GLMakie.@lift OpenLoopStrategy($strategy[2].xs, $strategy[2].us)
     strategy3 = GLMakie.@lift OpenLoopStrategy($strategy[3].xs, $strategy[3].us)
 
-    # TODO Fix plots. x-y positions are swapped after updating Makie
     GLMakie.plot!(axis, strategy1, color = :blue)
     GLMakie.plot!(axis, strategy2, color = :red)
     GLMakie.plot!(axis, strategy3, color = :green)
@@ -324,13 +323,22 @@ function plot_trajectories(;num_samples = 100, num_penalty = 6)
         goop_strategy2 = Observable(goop_data["strategy2"])
         goop_strategy3 = Observable(goop_data["strategy3"])
 
-        figure = GLMakie.Figure(size = (1000, 900)) #(5,4)
+        figure = GLMakie.Figure(size = (400, 500)) #(5,4)
         axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-0.5, 1), (-0.25, 0.25)), yticks = [-0.2, 0.2], xticks = [0.0, 1.0])
         axis.xgridvisible = false
         axis.ygridvisible = false
         GLMakie.hidespines!(axis)
-        GLMakie.hidexdecorations!(axis, ticklabels = false)
-        GLMakie.hideydecorations!(axis, ticklabels = false)
+        GLMakie.hidexdecorations!(axis)
+        GLMakie.hideydecorations!(axis)
+
+        # add text
+        GLMakie.text!(axis, 0.0, 0.35, text="Ours (GOOP)", 
+            font=:bold, align=(:left, :top), offset=(4, -2), 
+            space=:relative, fontsize = 18)
+
+        GLMakie.text!(axis, 0.84, 0.8, text="Goal",
+            font=:bold, align=(:left, :top), offset=(4, -2), 
+            space=:relative, fontsize = 18, color=:black)
 
         # visualize initial states (account for asynchronous update)
         GLMakie.scatter!(
@@ -338,6 +346,7 @@ function plot_trajectories(;num_samples = 100, num_penalty = 6)
             GLMakie.@lift([GLMakie.Point2f($initial_state1), GLMakie.Point2f($initial_state2), GLMakie.Point2f($initial_state3)]),
             markersize = 20,
             color = [:blue, :red, :green],
+            label=["Vehicle 1 (ambulance)", "Vehicle 2 (passenger car)", "Vehicle 3 (passenger car)"]
         )
 
         # Visualize highway lanes
@@ -351,31 +360,40 @@ function plot_trajectories(;num_samples = 100, num_penalty = 6)
             GLMakie.@lift(GLMakie.Point2f($goal_position1)),
             markersize = 20,
             marker = :star5,
-            color = :cyan,
+            color = :grey,
         )
 
         # Visualize trajectories
         goop_strategy1 = GLMakie.@lift OpenLoopStrategy($goop_strategy1.xs, $goop_strategy1.us)
         goop_strategy2 = GLMakie.@lift OpenLoopStrategy($goop_strategy2.xs, $goop_strategy2.us)
         goop_strategy3 = GLMakie.@lift OpenLoopStrategy($goop_strategy3.xs, $goop_strategy3.us)
-
+        
         GLMakie.plot!(axis, goop_strategy1, color = :blue)
         GLMakie.plot!(axis, goop_strategy2, color = :red)
         GLMakie.plot!(axis, goop_strategy3, color = :green)
 
-        # 2. Plot Baseline
+        # 2. Plot Baseline (only 2,4,6)
         for jj in 1:num_penalty
             push!(baseline_data, load_object("data/relaxably_feasible/Baseline_solution/$jj/$filename"))
-            axis = GLMakie.Axis(figure[1+jj, 1]; aspect = GLMakie.DataAspect(), limits = ((-0.5, 1), (-0.25, 0.25)), yticks = [-0.2, 0.2], xticks = [0.0, 1.0])
+        end
+        for jj in setdiff(1:num_penalty, [1,3,5])
+
+            axis = GLMakie.Axis(figure[Int(1+jj/2), 1]; aspect = GLMakie.DataAspect(), limits = ((-0.5, 1), (-0.25, 0.25)), yticks = [-0.2, 0.2], xticks = [0.0, 1.0])
             axis.xgridvisible = false
             axis.ygridvisible = false
             GLMakie.hidespines!(axis)
-            GLMakie.hidexdecorations!(axis, ticklabels = false)
-            GLMakie.hideydecorations!(axis, ticklabels = false)
+            GLMakie.hidexdecorations!(axis)
+            GLMakie.hideydecorations!(axis)
 
             baseline_strategy1 = Observable(baseline_data[jj]["strategy1"])
             baseline_strategy2 = Observable(baseline_data[jj]["strategy2"])
             baseline_strategy3 = Observable(baseline_data[jj]["strategy3"])
+
+            # add text
+            baseline = baseline_label[jj] 
+            GLMakie.text!(axis, 0.0, 0.35, text="Baseline (α = $baseline)",
+            font=:bold, align=(:left, :top), offset=(4, -2), 
+            space=:relative, fontsize = 18)
 
             # visualize initial states (account for asynchronous update)
             GLMakie.scatter!(
@@ -396,7 +414,7 @@ function plot_trajectories(;num_samples = 100, num_penalty = 6)
                 GLMakie.@lift(GLMakie.Point2f($goal_position1)),
                 markersize = 20,
                 marker = :star5,
-                color = :cyan,
+                color = :grey,
             )
 
             # Visualize trajectories
