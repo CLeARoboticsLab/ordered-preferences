@@ -4,8 +4,7 @@ using TrajectoryGamesExamples: UnicycleDynamics, planar_double_integrator
 using TrajectoryGamesBase:
     OpenLoopStrategy, unflatten_trajectory, state_dim, control_dim, control_bounds
 using GLMakie: GLMakie, Observable
-# using CairoMakie: CairoMakie
-using BlockArrays
+using BlockArrays, JLD2, ProgressMeter
 
 using OrderedPreferences
 
@@ -306,6 +305,111 @@ function demo(; verbose = false, paused = false, filename = "N_player_KKT_baseli
 
 end
 
+function plot_trajectories(;num_samples = 100, num_penalty = 6)
+    baseline_label = ["1", "10", "20", "30", "40", "50"]
+    baseline_data = Dict[]
 
+    @showprogress for ii in setdiff(1:num_samples, [23, 24, 25, 26, 27, 28])
+        # 1. Plot GOOP
+        problem_data = JLD2.load_object("./data/relaxably_feasible/problem/rfp_$ii.jld2")
+        filename = "rfp_$(ii)_sol.jld2"
+        goop_data = load_object("data/relaxably_feasible/GOOP_solution/$filename")
+
+        goal_position1 = Observable([0.9, 0.0])
+        initial_state1 = Observable(problem_data["initial_state1"])
+        initial_state2 = Observable(problem_data["initial_state2"])
+        initial_state3 = Observable(problem_data["initial_state3"])
+
+        goop_strategy1 = Observable(goop_data["strategy1"])
+        goop_strategy2 = Observable(goop_data["strategy2"])
+        goop_strategy3 = Observable(goop_data["strategy3"])
+
+        figure = GLMakie.Figure(size = (1000, 900)) #(5,4)
+        axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-0.5, 1), (-0.2, 0.2)), yticks = [-0.2, 0.2], xticks = [-0.5, 0.0, 1.0])
+        axis.xgridvisible = false
+        axis.ygridvisible = false
+
+        # visualize initial states (account for asynchronous update)
+        GLMakie.scatter!(
+            axis,
+            GLMakie.@lift([GLMakie.Point2f($initial_state1), GLMakie.Point2f($initial_state2), GLMakie.Point2f($initial_state3)]),
+            markersize = 20,
+            color = [:blue, :red, :green],
+        )
+
+        # Visualize highway lanes
+        GLMakie.lines!(axis, [(-1, 0.2), (1, 0.2)], color = :black)
+        GLMakie.lines!(axis, [(-1, -0.2), (1, -0.2)], color = :black)
+        GLMakie.lines!(axis, [(-1, 0.0), (1, 0.0)], color = :black, linestyle = :dash)
+
+        # visualize goal positions (common goal for now)
+        GLMakie.scatter!(
+            axis,
+            GLMakie.@lift(GLMakie.Point2f($goal_position1)),
+            markersize = 20,
+            marker = :star5,
+            color = :cyan,
+        )
+
+        # Visualize trajectories
+        goop_strategy1 = GLMakie.@lift OpenLoopStrategy($goop_strategy1.xs, $goop_strategy1.us)
+        goop_strategy2 = GLMakie.@lift OpenLoopStrategy($goop_strategy2.xs, $goop_strategy2.us)
+        goop_strategy3 = GLMakie.@lift OpenLoopStrategy($goop_strategy3.xs, $goop_strategy3.us)
+
+        GLMakie.plot!(axis, goop_strategy1, color = :blue)
+        GLMakie.plot!(axis, goop_strategy2, color = :red)
+        GLMakie.plot!(axis, goop_strategy3, color = :green)
+
+        # 2. Plot Baseline
+        for jj in 1:num_penalty
+            push!(baseline_data, load_object("data/relaxably_feasible/Baseline_solution/$jj/$filename"))
+            axis = GLMakie.Axis(figure[1+jj, 1]; aspect = GLMakie.DataAspect(), limits = ((-0.5, 1), (-0.2, 0.2)), yticks = [-0.2, 0.2], xticks = [-0.5, 0.0, 1.0])
+            axis.xgridvisible = false
+            axis.ygridvisible = false
+
+            baseline_strategy1 = Observable(baseline_data[jj]["strategy1"])
+            baseline_strategy2 = Observable(baseline_data[jj]["strategy2"])
+            baseline_strategy3 = Observable(baseline_data[jj]["strategy3"])
+
+            # visualize initial states (account for asynchronous update)
+            GLMakie.scatter!(
+                axis,
+                GLMakie.@lift([GLMakie.Point2f($initial_state1), GLMakie.Point2f($initial_state2), GLMakie.Point2f($initial_state3)]),
+                markersize = 20,
+                color = [:blue, :red, :green],
+            )
+
+            # Visualize highway lanes
+            GLMakie.lines!(axis, [(-1, 0.2), (1, 0.2)], color = :black)
+            GLMakie.lines!(axis, [(-1, -0.2), (1, -0.2)], color = :black)
+            GLMakie.lines!(axis, [(-1, 0.0), (1, 0.0)], color = :black, linestyle = :dash)
+
+            # visualize goal positions (common goal for now)
+            GLMakie.scatter!(
+                axis,
+                GLMakie.@lift(GLMakie.Point2f($goal_position1)),
+                markersize = 20,
+                marker = :star5,
+                color = :cyan,
+            )
+
+            # Visualize trajectories
+            baseline_strategy1 = GLMakie.@lift OpenLoopStrategy($baseline_strategy1.xs, $baseline_strategy1.us)
+            baseline_strategy2 = GLMakie.@lift OpenLoopStrategy($baseline_strategy2.xs, $baseline_strategy2.us)
+            baseline_strategy3 = GLMakie.@lift OpenLoopStrategy($baseline_strategy3.xs, $baseline_strategy3.us)
+
+            GLMakie.plot!(axis, baseline_strategy1, color = :blue)
+            GLMakie.plot!(axis, baseline_strategy2, color = :red)
+            GLMakie.plot!(axis, baseline_strategy3, color = :green)
+        end
+
+        # Save plot
+        GLMakie.save("data/relaxably_feasible/GOOP_Baseline_trajectory/$filename"[1:end-4] * "_trajectory" * ".png", figure)
+        
+        # Initialize baseline_data for next round
+        baseline_data = Dict[]
+    end
+
+end
 
 end
