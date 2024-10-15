@@ -4,7 +4,7 @@ using TrajectoryGamesBase:
     OpenLoopStrategy, unflatten_trajectory, state_dim, control_dim, control_bounds
 using CairoMakie: CairoMakie
 using BlockArrays
-using JLD2, ProgressMeter
+using JLD2, ProgressMeter, BenchmarkTools
 
 using OrderedPreferences
 
@@ -192,6 +192,9 @@ function demo(; verbose = false, num_samples = 10, pareto = false)
         penalties = [[α^2, α, 1.0] for α = 1:50]
     end
 
+    # Run-time record
+    runtime = Float64[]
+
     # Run the baseline experiment
     @showprogress desc="Running problem instances using baseline..." for ii in [39,97] #1:num_samples
         penalty_cnt = 1
@@ -215,8 +218,12 @@ function demo(; verbose = false, num_samples = 10, pareto = false)
             Baseline_not_converged = []
     
             function get_receding_horizon_solution(θ, ii, penalty_cnt; warmstart_solution)
-                solution = solve_penalty(problem, θ; initial_guess = warmstart_solution, verbose, return_primals = true)
-                
+                # Measure run time
+                elapsed_time = @elapsed begin
+                    solution = solve_penalty(problem, θ; initial_guess = warmstart_solution, verbose, return_primals = true)
+                end
+                push!(runtime, elapsed_time)
+
                 if string(solution.status) != "MCP_Solved"
                     println("Baseline #$penalty_cnt could not find a solution...moving on to the next problem")
                     return nothing
@@ -357,9 +364,12 @@ function demo(; verbose = false, num_samples = 10, pareto = false)
 
             # Reset
             Baseline_not_converged = []
+
+            # Save runtime
+            JLD2.save_object("./data/relaxably_feasible/runtime/rfp_runtime_$(ii)_baseline_$penalty_cnt.jld2", runtime)
         end
     end
-    
+
 end
 
 end

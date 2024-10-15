@@ -1,4 +1,4 @@
-module N_player_KKT_Highway
+module N_player_KKT_Highway_Hybrid
 
 using TrajectoryGamesExamples: UnicycleDynamics, planar_double_integrator
 using TrajectoryGamesBase:
@@ -134,8 +134,9 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
         ]
     ]
 
-    # Specify prioritized constraint
-    is_prioritized_constraint = [[true, true], [true, true], [true, true]]
+    # Specify prioritized constraint 
+    # (Hybrid: Intermediate level is transcribed into penalty-based method)
+    is_prioritized_constraint = [[true, false], [true, false], [true, false]]
 
     # Shared constraints
     function shared_equality_constraints(z, θ)
@@ -156,7 +157,7 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
         end
     end
 
-    problem = ParametricOrderedPreferencesMPCCGame(;
+    problem = ParametricOrderedPreferencesMPCCGameHybrid(;
         objectives,
         equality_constraints,
         inequality_constraints,
@@ -213,7 +214,7 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
     dist = Normal(0.0, 0.01)
     num_perturb = 20
     equilibrium_tally_goop = []
-    tol = 2e-2
+    tol = 2e-2 
 
     # Run-time record
     runtime = Float64[]
@@ -248,14 +249,15 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
                 "strategy3" => strategies[3],
                 "primals" => solution[min_residual_idx].primals,
             )
-            JLD2.save_object("./data/relaxably_feasible/GOOP_solution/rfp_$ii"*"_sol.jld2", solution_dict)
+            ######## Hybrid #########
+            JLD2.save_object("./data/relaxably_feasible/GOOP_solution/rfp_$(ii)_hybrid_sol.jld2", solution_dict)
         end
 
         (; strategies, solution)
     end
 
     # Run the experiment
-    @showprogress desc="Running problem instances..." for ii in 2:num_samples
+    @showprogress desc="Running problem instances..." for ii in 1:num_samples
         # Load problem data
         problem_data = JLD2.load_object("./data/relaxably_feasible/problem/rfp_$ii.jld2")
 
@@ -427,7 +429,7 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
             CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][3], label = "Vehicle 3", color = :green)
             CairoMakie.lines!(ax3, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
 
-            CairoMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_speed_$ii" * ".png", fig)
+            CairoMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_speed_$(ii)_hybrid" * ".png", fig)
             fig
 
             # Visualize distance bw vehicles , limits = (nothing, (collision_avoidance-0.05, 0.4)) 
@@ -439,20 +441,20 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
             CairoMakie.lines!(ax4, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
             fig[2,1] = CairoMakie.Legend(fig, ax4, framevisible = false, orientation = :horizontal)
 
-            CairoMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_distance_$ii" * ".png", fig)
+            CairoMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_distance_$(ii)_hybrid" * ".png", fig)
             fig
         end
     end
 
     # Save not-converged instances
-    JLD2.save_object("./data/rfp_GOOP_not_converged.jld2", GOOP_not_converged)
+    JLD2.save_object("./data/rfp_GOOP_not_converged_hybrid.jld2", GOOP_not_converged)
 
     # Save equilibrium tally
-    JLD2.save_object("./data/relaxably_feasible/GOOP_solution/rfp_equilibrium.jld2", equilibrium_tally_goop)
+    JLD2.save_object("./data/relaxably_feasible/GOOP_solution/rfp_equilibrium_hybrid.jld2", equilibrium_tally_goop)
     println("equilibrium tally: ", equilibrium_tally_goop)
 
     # Save runtime
-    JLD2.save_object("./data/relaxably_feasible/runtime/rfp_runtime_goop.jld2", runtime)
+    JLD2.save_object("./data/relaxably_feasible/runtime/rfp_runtime_hybrid.jld2", runtime)
 end
 
 end

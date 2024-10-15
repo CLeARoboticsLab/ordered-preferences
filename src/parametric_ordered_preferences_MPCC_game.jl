@@ -117,7 +117,7 @@ function ParametricOrderedPreferencesMPCCGame(;
 
             slacks_ii = last(z[Block(1)], slack_dimension_ii)
 
-            objective_ii = 10*sum(slacks_ii)
+            objective_ii = 15*sum(slacks_ii)
 
             # auxillary constraint: fᵢ(x,θ) + sᵢ ≥ 0 
             auxillary_constraints = prioritized_constraints_ii(x, θ) .+ slacks_ii
@@ -244,22 +244,21 @@ function ParametricOrderedPreferencesMPCCGame(;
     # Take original primals out of x
     trajectory_primals = [
         i > 1 ?
-        z[(1:private_primals[i][1]) .+ primal_dimensions[i-1]] :
+        z[(1:private_primals[i][1]) .+ sum(primal_dimensions[1:i-1])] :
         z[1:private_primals[i][1]]
         for i in 1:num_players
-    ] #[1:30, 258:287]
+    ] 
 
     trajectory_x = BlockArray(vcat(trajectory_primals...), [private_primals[i][1] for i in 1:num_players])
     # Block(1): z[1], ..., z[30]
-    # Block(2): z[258],...,z[287]
+    # Block(2): z[290],...,z[319]
+    # Block(3): z[674], ..., z[703]
 
     fs = map(f->f(trajectory_x,θ), objectives)
     gs = private_inner_equality_constraints # contains MPCC (nested) constraints
     hs = private_inner_inequality_constraints # here too
     g̃ = shared_equality_constraints(trajectory_x,θ)
     h̃ = shared_inequality_constraints(trajectory_x,θ)
-
-    # Main.@infiltrate
 
     # Build Lagrangian for all players.
     Ls = map(zip(1:num_players, fs, gs, hs)) do (i, f, g, h)
@@ -421,7 +420,7 @@ function solve_relaxed_pop_game(
 
     complementarity_residual = 1.0
     converged_tolerance = 1e-6
-    PATH_tolerance = 8e-2 #2e-2
+    PATH_tolerance = 5e-2 #2e-2
 
     relaxations = ϵ * κ.^(0:max_iterations) # [1.0, 0.1, 0.01, ... 1e-10]
     ii = 1
@@ -491,11 +490,11 @@ function solve_relaxed_pop_game(
 
         # Update initial_guess
         initial_guess = zeros(total_dim(problem))
-        if complementarity_residual < 2.0 * tolerance
-            for i in 1:length(problem.objectives)
-                initial_guess[first(problem.trajectory_idx[i])] = solution.variables[first(problem.trajectory_idx[i])]
-            end
-        end
+        # if complementarity_residual < 2.0 * tolerance
+        #     for i in 1:length(problem.objectives)
+        #         initial_guess[first(problem.trajectory_idx[i])] = solution.variables[first(problem.trajectory_idx[i])]
+        #     end
+        # end
 
         # Begin next iteration
         ii += 1
