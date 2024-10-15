@@ -295,54 +295,55 @@ function demo(; verbose = false, num_samples = 10, pareto = false)
                 push!(Baseline_not_converged, ii)
                 continue
             else
-    
-                # Store speed data for Highway
-                horizontal_speed_data = Vector{Vector{Float64}}[]
-                vertical_speed_data = Vector{Vector{Float64}}[]
-                openloop_distance1 = Vector{Float64}[]
-                openloop_distance2 = Vector{Float64}[]
-                openloop_distance3 = Vector{Float64}[]
-    
-                # Store openloop speed data
-                push!(horizontal_speed_data, [vcat(strategy[1].xs...)[3:4:end], vcat(strategy[2].xs...)[3:4:end], vcat(strategy[3].xs...)[3:4:end]])
-                push!(vertical_speed_data, [vcat(strategy[1].xs...)[4:4:end], vcat(strategy[2].xs...)[4:4:end], vcat(strategy[3].xs...)[4:4:end]])
-    
-                # Store openloop distance data
-                push!(openloop_distance1, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-                push!(openloop_distance2, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-                push!(openloop_distance3, [sqrt(sum((strategy[2].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-    
-                # Visualize horizontal speed
-                T = 1
-                fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
-                ax2 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "speed", title = "Horizontal Speed")
-                CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][1], label = "Vehicle 1", color = :blue)
-                CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][2], label = "Vehicle 2", color = :red)
-                CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][3], label = "Vehicle 3", color = :green)
-                CairoMakie.lines!(ax2, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
-                fig[2,1:2] = CairoMakie.Legend(fig, ax2, framevisible = false, orientation = :horizontal)
-    
-                # Visualize vertical speed
-                ax3 = CairoMakie.Axis(fig[1, 2]; xlabel = "time step", ylabel = "speed", title = "Vertical Speed")
-                CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][1], label = "Vehicle 1", color = :blue)
-                CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][2], label = "Vehicle 2", color = :red)
-                CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][3], label = "Vehicle 3", color = :green)
-                CairoMakie.lines!(ax3, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
-    
-                CairoMakie.save("./data/relaxably_feasible/Baseline_plots/$penalty_cnt/" * "rfp_baseline_speed_$ii" * ".png", fig)
-                fig
-    
-                # Visualize distance bw vehicles , limits = (nothing, (collision_avoidance-0.05, 0.4)) 
-                fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
-                ax4 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "distance", title = "Distance bw vehicles")
-                CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance1[T], label = "B/w Agent 1 & Agent 2", color = :black, marker = :star5, markersize = 20)
-                CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance2[T], label = "B/w Agent 1 & Agent 3", color = :orange, marker = :diamond, markersize = 20)
-                CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance3[T], label = "B/w Agent 2 & Agent 3", color = :purple, marker = :circle, markersize = 20)
-                CairoMakie.lines!(ax4, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
-                fig[2,1] = CairoMakie.Legend(fig, ax4, framevisible = false, orientation = :horizontal)
-    
-                CairoMakie.save("./data/relaxably_feasible/Baseline_plots/$penalty_cnt/" * "rfp_baseline_distance_$ii" * ".png", fig)
-                fig
+                if !pareto 
+                    # Store speed data for Highway
+                    horizontal_speed_data = Vector{Vector{Float64}}[]
+                    vertical_speed_data = Vector{Vector{Float64}}[]
+                    openloop_distance1 = Vector{Float64}[]
+                    openloop_distance2 = Vector{Float64}[]
+                    openloop_distance3 = Vector{Float64}[]
+        
+                    # Store openloop speed data
+                    push!(horizontal_speed_data, [vcat(strategy[1].xs...)[3:4:end], vcat(strategy[2].xs...)[3:4:end], vcat(strategy[3].xs...)[3:4:end]])
+                    push!(vertical_speed_data, [vcat(strategy[1].xs...)[4:4:end], vcat(strategy[2].xs...)[4:4:end], vcat(strategy[3].xs...)[4:4:end]])
+        
+                    # Store openloop distance data
+                    push!(openloop_distance1, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+                    push!(openloop_distance2, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+                    push!(openloop_distance3, [sqrt(sum((strategy[2].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+        
+                    # Visualize horizontal speed
+                    T = 1
+                    fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
+                    ax2 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "speed", title = "Horizontal Speed")
+                    CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][1], label = "Vehicle 1", color = :blue)
+                    CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][2], label = "Vehicle 2", color = :red)
+                    CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][3], label = "Vehicle 3", color = :green)
+                    CairoMakie.lines!(ax2, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+                    fig[2,1:2] = CairoMakie.Legend(fig, ax2, framevisible = false, orientation = :horizontal)
+        
+                    # Visualize vertical speed
+                    ax3 = CairoMakie.Axis(fig[1, 2]; xlabel = "time step", ylabel = "speed", title = "Vertical Speed")
+                    CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][1], label = "Vehicle 1", color = :blue)
+                    CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][2], label = "Vehicle 2", color = :red)
+                    CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][3], label = "Vehicle 3", color = :green)
+                    CairoMakie.lines!(ax3, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+        
+                    CairoMakie.save("./data/relaxably_feasible/Baseline_plots/$penalty_cnt/" * "rfp_baseline_speed_$ii" * ".png", fig)
+                    fig
+        
+                    # Visualize distance bw vehicles , limits = (nothing, (collision_avoidance-0.05, 0.4)) 
+                    fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
+                    ax4 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "distance", title = "Distance bw vehicles")
+                    CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance1[T], label = "B/w Agent 1 & Agent 2", color = :black, marker = :star5, markersize = 20)
+                    CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance2[T], label = "B/w Agent 1 & Agent 3", color = :orange, marker = :diamond, markersize = 20)
+                    CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance3[T], label = "B/w Agent 2 & Agent 3", color = :purple, marker = :circle, markersize = 20)
+                    CairoMakie.lines!(ax4, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+                    fig[2,1] = CairoMakie.Legend(fig, ax4, framevisible = false, orientation = :horizontal)
+        
+                    CairoMakie.save("./data/relaxably_feasible/Baseline_plots/$penalty_cnt/" * "rfp_baseline_distance_$ii" * ".png", fig)
+                    fig
+                end
             end
 
             # Save not-converged instances
