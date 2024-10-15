@@ -172,30 +172,28 @@ function get_setup(num_players, penalty_weights; dynamics = UnicycleDynamics, pl
     (; problem, flatten_parameters, unflatten_parameters)
 end
 
-function demo(; verbose = false, num_samples = 10, filename = "N_player_KKT_baseline.mp4")
+function demo(; verbose = false, num_samples = 10, pareto = false)
     num_players = 3
     dynamics = planar_double_integrator(; control_bounds = (; lb = [-2.0, -2.0], ub = [2.0, 2.0])) # x := (px, py, vx, vy) and u := (ax, ay).
     planning_horizon = 5
     obstacle_radius = 0.25
     collision_avoidance = 0.2
 
-    penalties = [# 1, δ, δ²
-        [1.0, 1.0, 1.0],        # δ = 1
-        [100.0, 10.0, 1.0],     # δ = 10
-        [400.0, 20.0, 1.0],     # δ = 20
-        [900.0, 30.0, 1.0],     # δ = 30
-        [1600.0, 40.0, 1.0],    # δ = 40
-        [2500.0, 50.0, 1.0],    # δ = 50
-        # [3600.0, 60.0, 1.0],    # δ = 60
-        # [4900.0, 70.0, 1.0],    # δ = 70
-        # [6400.0, 80.0, 1.0],    # δ = 80
-        # [8100.0, 90.0, 1.0],    # δ = 90
-        # [10000.0, 100.0, 1.0],  # δ = 100
-        # [1000000.0, 1000.0, 1.0],  # δ = 1000
+    if !pareto
+        penalties = [# 1, α, α²
+            [1.0, 1.0, 1.0],        # α = 1
+            [100.0, 10.0, 1.0],     # α = 10
+            [400.0, 20.0, 1.0],     # α = 20
+            [900.0, 30.0, 1.0],     # α = 30
+            [1600.0, 40.0, 1.0],    # α = 40
+            [2500.0, 50.0, 1.0],    # α = 50
         ]
+    else
+        penalties = [[α^2, α, 1.0] for α = 1:50]
+    end
 
     # Run the baseline experiment
-    @showprogress desc="Running problem instances using baseline..." for ii in 1:num_samples
+    @showprogress desc="Running problem instances using baseline..." for ii in [39,97] #1:num_samples
         penalty_cnt = 1
         println("-----------------------------------------------------")
         for penalty in penalties
@@ -235,7 +233,11 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_KKT_base
                         "strategy3" => strategies[3],
                         "primals" => solution.primals,
                     )
-                    JLD2.save_object("./data/relaxably_feasible/Baseline_solution/$penalty_cnt/rfp_$ii"*"_sol.jld2", solution_dict)
+                    if !pareto
+                        JLD2.save_object("./data/relaxably_feasible/Baseline_solution/$penalty_cnt/rfp_$ii"*"_sol.jld2", solution_dict)
+                    else
+                        JLD2.save_object("./data_pareto/Baseline_solution/$ii/rfp_$(ii)_baseline$penalty_cnt"*"_sol.jld2", solution_dict)
+                    end
                 end
 
                 (; strategies, solution)
@@ -344,8 +346,11 @@ function demo(; verbose = false, num_samples = 10, filename = "N_player_KKT_base
             end
 
             # Save not-converged instances
-            JLD2.save_object("./data/rfp_baseline_not_converged"*"_$penalty_cnt"*".jld2", Baseline_not_converged)
-        
+            if !pareto
+                JLD2.save_object("./data/rfp_baseline_not_converged"*"_$penalty_cnt"*".jld2", Baseline_not_converged)
+            else
+                JLD2.save_object("./data/rfp_$(ii)_baseline_not_converged"*"_$penalty_cnt"*".jld2", Baseline_not_converged)
+            end
             # Update penalty_cnt
             penalty_cnt += 1
 
