@@ -196,7 +196,7 @@ function demo(; verbose = false, num_samples = 10, pareto = false)
     runtime = Float64[]
 
     # Run the baseline experiment
-    @showprogress desc="Running problem instances using baseline..." for ii in [39,97] #1:num_samples
+    @showprogress desc="Running problem instances using baseline..." for ii in 1:num_samples #[39,97] #1:num_samples
         penalty_cnt = 1
         println("-----------------------------------------------------")
         for penalty in penalties
@@ -359,15 +359,19 @@ function demo(; verbose = false, num_samples = 10, pareto = false)
             else
                 JLD2.save_object("./data/rfp_$(ii)_baseline_not_converged"*"_$penalty_cnt"*".jld2", Baseline_not_converged)
             end
+
             # Update penalty_cnt
             penalty_cnt += 1
 
             # Reset
             Baseline_not_converged = []
-
-            # Save runtime
-            JLD2.save_object("./data/relaxably_feasible/runtime/rfp_runtime_$(ii)_baseline_$penalty_cnt.jld2", runtime)
         end
+        
+        # Save runtime
+        JLD2.save_object("./data/relaxably_feasible/runtime/rfp_runtime_$(ii)_baseline.jld2", runtime)
+        
+        # Reset
+        runtime = Float64[]
     end
 
 end
