@@ -183,7 +183,8 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
     relaxation_mode = :standard
 
     num_players = 3
-    dynamics = planar_double_integrator(; control_bounds = (; lb = [-2.0, -2.0], ub = [2.0, 2.0])) # x := (px, py, vx, vy) and u := (ax, ay).
+    control_bounds = (; lb = [-2.0, -2.0], ub = [2.0, 2.0])
+    dynamics = planar_double_integrator(; control_bounds) # x := (px, py, vx, vy) and u := (ax, ay).
     planning_horizon = 5
     obstacle_radius = 0.25
     collision_avoidance = 0.2
@@ -218,7 +219,7 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
     # Run-time record
     runtime = Float64[]
 
-    function get_receding_horizon_solution(θ, ii; warmstart_solution)
+    function get_receding_horizon_solution(θ, ii, jj; warmstart_solution)
         # Measure run time
         elapsed_time = @elapsed begin
             (; relaxation, solution, residual) =
@@ -248,14 +249,14 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
                 "strategy3" => strategies[3],
                 "primals" => solution[min_residual_idx].primals,
             )
-            JLD2.save_object("./data/relaxably_feasible/GOOP_solution/rfp_$ii"*"_sol.jld2", solution_dict)
+            JLD2.save_object("./data/relaxably_feasible/GOOP_solution/rfp_$(ii)_w$jj"*"_sol.jld2", solution_dict)
         end
 
         (; strategies, solution)
     end
 
     # Run the experiment
-    @showprogress desc="Running problem instances..." for ii in 1:num_samples
+    @showprogress desc="Running problem instances..." for ii in [2] #1:num_samples
         # Load problem data
         problem_data = JLD2.load_object("./data/relaxably_feasible/problem/rfp_$ii.jld2")
 
@@ -293,154 +294,181 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
         println("initial_state2:", initial_state2)
         println("initial_state3:", initial_state3)
 
-        result = get_receding_horizon_solution(θ, ii; warmstart_solution)
-        warmstart_solution = nothing
-        if isnothing(result)
-            strategy = nothing
-        else
-            strategy = result.strategies
-        end
-
-        # If not solved, then continue to next problem instance (#5 cannot)
-        if isnothing(strategy)
-            push!(GOOP_not_converged, ii)
-            continue
-        else
-            if check_equilibrium
-                # Check if the solution is an equilibrium
-                count_equilibrium_goop = 0
-                goop_z = BlockArray(
-                    mapreduce(vcat, 1:num_players) do i
-                        mapreduce(vcat, 1:planning_horizon) do k
-                            vcat(strategy[i].xs[k], strategy[i].us[k])
-                        end
-                end, fill(primal_dimension, num_players))
-
-                θ_blocked = BlockArray(θ, fill(Int(length(θ)/num_players), num_players))
-
-                @showprogress desc="  Checking equilibrium..." for jj in 1:num_perturb
-                    perturbed_x = [[strategy[1].xs[1]], [strategy[2].xs[1]], [strategy[3].xs[1]]]
-                    perturbed_u = [[], [], []]
-
-                    for kk in 1:num_players
-                        println("   Checking x*...@perturbation #$jj, player#$kk")
-
-                        perturbed_z_block = []
-                        check_inequality, check_shared_equality, check_shared_inequality = false, false, false
-                        while !(check_inequality && check_shared_equality && check_shared_inequality)
-                            # Step 1: Perturb control sequence u by ω = rand(dist, n_size) and generate perturbed trajectory x
-                            for i in 1:planning_horizon-1
-                                local u = strategy[kk].us[i] + rand(dist, control_dim(dynamics))
-                                push!(perturbed_u[kk], u)
-                                push!(perturbed_x[kk], dynamics(perturbed_x[kk][i], u))
-                            end
-                            push!(perturbed_u[kk], [0.0, 0.0])
-                            # Step 2: Check if the perturbed trajectory x satisfies shared constraints and inequality constraints
-                            # Rejection sampling. Feasible perturbations.Fix others' strategy constant and perturb one player's strategy
-                            perturbed_z_block = mapreduce(vcat, 1:planning_horizon) do i
-                                vcat(perturbed_x[kk][i], perturbed_u[kk][i])
-                            end
-                            check_inequality = all(inequality_constraints[kk](perturbed_z_block, θ_blocked) .≥ -tol)
-
-                            perturbed_z = let
-                                z_temp = copy(goop_z)
-                                z = blocks(z_temp)
-                                z[kk] = perturbed_z_block
-                                mortar(z)
-                            end
-                            check_shared_inequality = all(shared_inequality_constraints(perturbed_z, θ_blocked) .≥ -tol)
-                            check_shared_equality = all(shared_equality_constraints(perturbed_z, θ_blocked) .== 0.0)
-
-                            # Initialize perturbed trajectory for next iteration
-                            perturbed_x = [[strategy[1].xs[1]], [strategy[2].xs[1]], [strategy[3].xs[1]]]
-                            perturbed_u = [[], [], []]
-                        end
-
-                        # Step 3: Check if f₃(x*, θ) < f₃(x, θ) in the neighborhood of x*
-                        f₃_star = sum(max.(0, -prioritized_preferences[kk][1](goop_z[Block(kk)], θ_blocked)))
-                        f₃ = sum(max.(0, -prioritized_preferences[kk][1](perturbed_z_block, θ_blocked)))
-                        if f₃_star < f₃
-                            println("    f₃(x*, θ) < f₃(x, θ) in the neighborhood of x* for player #$kk")
-                        elseif isapprox(f₃_star, f₃, atol = tol)
-                            println("    f₃(x*, θ) close to f₃(x, θ) for player #$kk")
-                            println("    |f₃(x*, θ) - f₃(x, θ)| = $(abs(f₃_star - f₃))")
-
-                            # Step 4: Check if f₂(x*, θ) > f₂(x, θ) in the neighborhood of x*
-                            f₂_star = sum(max.(0, -prioritized_preferences[kk][2](goop_z[Block(kk)], θ_blocked)))
-                            f₂ = sum(max.(0, -prioritized_preferences[kk][2](perturbed_z_block, θ_blocked)))
-                            if f₂_star < f₂
-                                println("    f₂(x*, θ) < f₂(x, θ) in the neighborhood of x* for player #$kk")
-                            elseif isapprox(f₂_star, f₂, atol = tol)
-                                println("    f₂(x*, θ) close to f₂(x, θ) for player #$kk")
-                                println("    |f₂(x*, θ) - f₂(x, θ)| = $(abs(f₂_star - f₂))")
-                            else
-                                println("    f₂(x*, θ) > f₂(x, θ) SOMETHING IS WRONG for player #$kk")
-                            end
-                        else
-                            println("    f₃(x*, θ) > f₃(x, θ) SOMETHING IS WRONG for player #$kk")
-                        end
-
-                        # Step 5: Check if x* is an equilibrium
-                        if f₃_star < f₃ || (isapprox(f₃_star, f₃, atol = tol) && (f₂_star < f₂ || isapprox(f₂_star, f₂, atol = tol)))
-                            println("   x* is a GOOP equilibrium...@perturbation #$jj for player #$kk")
-                            count_equilibrium_goop += 1
-                        else
-                            println("   x* is not a GOOP equilibrium...@perturbation #$jj for player #$kk")
-                        end
+        # Generate multiple equilibrium solutions
+        n_samples = 10
+        @showprogress desc="    Using different initial guesses..." for jj in 1:n_samples
+            if jj == 1
+                # initial guess is all zeros
+                warmstart_solution = nothing
+            else
+                # using a random control sequence
+                warmstart_x = [[initial_state1], [initial_state2], [initial_state3]]
+                warmstart_u = [[], [], []]
+                warmstart_solution = []
+                rand_u = 4 * rand(num_players, control_dim(dynamics)) .- 2.0 # between -2.0 and 2.0
+                for kk in 1:num_players
+                    for i in 1:planning_horizon-1
+                        push!(warmstart_u[kk], rand_u[kk,:])
+                        push!(warmstart_x[kk], dynamics(warmstart_x[kk][i], rand_u[kk,:]))
                     end
+                    push!(warmstart_u[kk], [0.0, 0.0])
+                    warmstart_primals = mapreduce(vcat, 1:planning_horizon) do i 
+                        vcat(warmstart_x[kk][i], warmstart_u[kk][i])
+                    end
+                    push!(warmstart_solution, warmstart_primals)
                 end
-                # Check goop equilibrium data
-                println("goop soln for prob #$ii is equilibrium in ", count_equilibrium_goop/num_players, " cases (out of $num_perturb)")
-                push!(equilibrium_tally_goop, count_equilibrium_goop/num_players)
+                warmstart_solution = vcat(warmstart_solution...)
+            end
+            # println("    Using warmstart solution #$jj...")
+            # println("    warmstart_solution: ", warmstart_solution)
+            result = get_receding_horizon_solution(θ, ii, jj; warmstart_solution)
+            if isnothing(result)
+                strategy = nothing
+            else
+                strategy = result.strategies
             end
 
-            # Store speed data for Highway
-            horizontal_speed_data = Vector{Vector{Float64}}[]
-            vertical_speed_data = Vector{Vector{Float64}}[]
-            openloop_distance1 = Vector{Float64}[]
-            openloop_distance2 = Vector{Float64}[]
-            openloop_distance3 = Vector{Float64}[]
+            # If not solved, then continue to next problem instance (#5 cannot)
+            if isnothing(strategy)
+                push!(GOOP_not_converged, ii)
+                continue
+            else
+                if check_equilibrium
+                    # Check if the solution is an equilibrium
+                    count_equilibrium_goop = 0
+                    goop_z = BlockArray(
+                        mapreduce(vcat, 1:num_players) do i
+                            mapreduce(vcat, 1:planning_horizon) do k
+                                vcat(strategy[i].xs[k], strategy[i].us[k])
+                            end
+                    end, fill(primal_dimension, num_players))
 
-            # Store openloop speed data
-            push!(horizontal_speed_data, [vcat(strategy[1].xs...)[3:4:end], vcat(strategy[2].xs...)[3:4:end], vcat(strategy[3].xs...)[3:4:end]])
-            push!(vertical_speed_data, [vcat(strategy[1].xs...)[4:4:end], vcat(strategy[2].xs...)[4:4:end], vcat(strategy[3].xs...)[4:4:end]])
-        
-            # Store openloop distance data
-            push!(openloop_distance1, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-            push!(openloop_distance2, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-            push!(openloop_distance3, [sqrt(sum((strategy[2].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+                    θ_blocked = BlockArray(θ, fill(Int(length(θ)/num_players), num_players))
 
-            # Visualize horizontal speed
-            T = 1
-            fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
-            ax2 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "speed", title = "Horizontal Speed")
-            CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][1], label = "Vehicle 1", color = :blue)
-            CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][2], label = "Vehicle 2", color = :red)
-            CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][3], label = "Vehicle 3", color = :green)
-            CairoMakie.lines!(ax2, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
-            fig[2,1:2] = CairoMakie.Legend(fig, ax2, framevisible = false, orientation = :horizontal)
+                    @showprogress desc="  Checking equilibrium..." for ll in 1:num_perturb
+                        perturbed_x = [[strategy[1].xs[1]], [strategy[2].xs[1]], [strategy[3].xs[1]]]
+                        perturbed_u = [[], [], []]
 
-            # Visualize vertical speed
-            ax3 = CairoMakie.Axis(fig[1, 2]; xlabel = "time step", ylabel = "speed", title = "Vertical Speed")
-            CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][1], label = "Vehicle 1", color = :blue)
-            CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][2], label = "Vehicle 2", color = :red)
-            CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][3], label = "Vehicle 3", color = :green)
-            CairoMakie.lines!(ax3, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+                        for kk in 1:num_players
+                            println("   Checking x*...@perturbation #$ll, player#$kk")
 
-            CairoMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_speed_$ii" * ".png", fig)
-            fig
+                            perturbed_z_block = []
+                            check_inequality, check_shared_equality, check_shared_inequality = false, false, false
+                            while !(check_inequality && check_shared_equality && check_shared_inequality)
+                                # Step 1: Perturb control sequence u by ω = rand(dist, n_size) and generate perturbed trajectory x
+                                for i in 1:planning_horizon-1
+                                    local u = strategy[kk].us[i] + rand(dist, control_dim(dynamics))
+                                    push!(perturbed_u[kk], u)
+                                    push!(perturbed_x[kk], dynamics(perturbed_x[kk][i], u))
+                                end
+                                push!(perturbed_u[kk], [0.0, 0.0])
+                                # Step 2: Check if the perturbed trajectory x satisfies shared constraints and inequality constraints
+                                # Rejection sampling. Feasible perturbations.Fix others' strategy constant and perturb one player's strategy
+                                perturbed_z_block = mapreduce(vcat, 1:planning_horizon) do i
+                                    vcat(perturbed_x[kk][i], perturbed_u[kk][i])
+                                end
+                                check_inequality = all(inequality_constraints[kk](perturbed_z_block, θ_blocked) .≥ -tol)
 
-            # Visualize distance bw vehicles , limits = (nothing, (collision_avoidance-0.05, 0.4)) 
-            fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
-            ax4 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "distance", title = "Distance bw vehicles")
-            CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance1[T], label = "B/w Agent 1 & Agent 2", color = :black, marker = :star5, markersize = 20)
-            CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance2[T], label = "B/w Agent 1 & Agent 3", color = :orange, marker = :diamond, markersize = 20)
-            CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance3[T], label = "B/w Agent 2 & Agent 3", color = :purple, marker = :circle, markersize = 20)
-            CairoMakie.lines!(ax4, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
-            fig[2,1] = CairoMakie.Legend(fig, ax4, framevisible = false, orientation = :horizontal)
+                                perturbed_z = let
+                                    z_temp = copy(goop_z)
+                                    z = blocks(z_temp)
+                                    z[kk] = perturbed_z_block
+                                    mortar(z)
+                                end
+                                check_shared_inequality = all(shared_inequality_constraints(perturbed_z, θ_blocked) .≥ -tol)
+                                check_shared_equality = all(shared_equality_constraints(perturbed_z, θ_blocked) .== 0.0)
 
-            CairoMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_distance_$ii" * ".png", fig)
-            fig
+                                # Initialize perturbed trajectory for next iteration
+                                perturbed_x = [[strategy[1].xs[1]], [strategy[2].xs[1]], [strategy[3].xs[1]]]
+                                perturbed_u = [[], [], []]
+                            end
+
+                            # Step 3: Check if f₃(x*, θ) < f₃(x, θ) in the neighborhood of x*
+                            f₃_star = sum(max.(0, -prioritized_preferences[kk][1](goop_z[Block(kk)], θ_blocked)))
+                            f₃ = sum(max.(0, -prioritized_preferences[kk][1](perturbed_z_block, θ_blocked)))
+                            if f₃_star < f₃
+                                println("    f₃(x*, θ) < f₃(x, θ) in the neighborhood of x* for player #$kk")
+                            elseif isapprox(f₃_star, f₃, atol = tol)
+                                println("    f₃(x*, θ) close to f₃(x, θ) for player #$kk")
+                                println("    |f₃(x*, θ) - f₃(x, θ)| = $(abs(f₃_star - f₃))")
+
+                                # Step 4: Check if f₂(x*, θ) > f₂(x, θ) in the neighborhood of x*
+                                f₂_star = sum(max.(0, -prioritized_preferences[kk][2](goop_z[Block(kk)], θ_blocked)))
+                                f₂ = sum(max.(0, -prioritized_preferences[kk][2](perturbed_z_block, θ_blocked)))
+                                if f₂_star < f₂
+                                    println("    f₂(x*, θ) < f₂(x, θ) in the neighborhood of x* for player #$kk")
+                                elseif isapprox(f₂_star, f₂, atol = tol)
+                                    println("    f₂(x*, θ) close to f₂(x, θ) for player #$kk")
+                                    println("    |f₂(x*, θ) - f₂(x, θ)| = $(abs(f₂_star - f₂))")
+                                else
+                                    println("    f₂(x*, θ) > f₂(x, θ) SOMETHING IS WRONG for player #$kk")
+                                end
+                            else
+                                println("    f₃(x*, θ) > f₃(x, θ) SOMETHING IS WRONG for player #$kk")
+                            end
+
+                            # Step 5: Check if x* is an equilibrium
+                            if f₃_star < f₃ || (isapprox(f₃_star, f₃, atol = tol) && (f₂_star < f₂ || isapprox(f₂_star, f₂, atol = tol)))
+                                println("   x* is a GOOP equilibrium...@perturbation #$ll for player #$kk")
+                                count_equilibrium_goop += 1
+                            else
+                                println("   x* is not a GOOP equilibrium...@perturbation #$ll for player #$kk")
+                            end
+                        end
+                    end
+                    # Check goop equilibrium data
+                    println("goop soln for prob #$(ii)_w$jj is equilibrium in ", count_equilibrium_goop/num_players, " cases (out of $num_perturb)")
+                    push!(equilibrium_tally_goop, count_equilibrium_goop/num_players)
+                end
+
+                # Store speed data for Highway
+                horizontal_speed_data = Vector{Vector{Float64}}[]
+                vertical_speed_data = Vector{Vector{Float64}}[]
+                openloop_distance1 = Vector{Float64}[]
+                openloop_distance2 = Vector{Float64}[]
+                openloop_distance3 = Vector{Float64}[]
+
+                # Store openloop speed data
+                push!(horizontal_speed_data, [vcat(strategy[1].xs...)[3:4:end], vcat(strategy[2].xs...)[3:4:end], vcat(strategy[3].xs...)[3:4:end]])
+                push!(vertical_speed_data, [vcat(strategy[1].xs...)[4:4:end], vcat(strategy[2].xs...)[4:4:end], vcat(strategy[3].xs...)[4:4:end]])
+            
+                # Store openloop distance data
+                push!(openloop_distance1, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+                push!(openloop_distance2, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+                push!(openloop_distance3, [sqrt(sum((strategy[2].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
+
+                # Visualize horizontal speed
+                T = 1
+                fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
+                ax2 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "speed", title = "Horizontal Speed")
+                CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][1], label = "Vehicle 1", color = :blue)
+                CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][2], label = "Vehicle 2", color = :red)
+                CairoMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][3], label = "Vehicle 3", color = :green)
+                CairoMakie.lines!(ax2, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+                fig[2,1:2] = CairoMakie.Legend(fig, ax2, framevisible = false, orientation = :horizontal)
+
+                # Visualize vertical speed
+                ax3 = CairoMakie.Axis(fig[1, 2]; xlabel = "time step", ylabel = "speed", title = "Vertical Speed")
+                CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][1], label = "Vehicle 1", color = :blue)
+                CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][2], label = "Vehicle 2", color = :red)
+                CairoMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][3], label = "Vehicle 3", color = :green)
+                CairoMakie.lines!(ax3, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+
+                CairoMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_speed_$(ii)_w$jj" * ".png", fig)
+                fig
+
+                # Visualize distance bw vehicles , limits = (nothing, (collision_avoidance-0.05, 0.4)) 
+                fig = CairoMakie.Figure() # limits = (nothing, (nothing, 0.7))
+                ax4 = CairoMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "distance", title = "Distance bw vehicles")
+                CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance1[T], label = "B/w Agent 1 & Agent 2", color = :black, marker = :star5, markersize = 20)
+                CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance2[T], label = "B/w Agent 1 & Agent 3", color = :orange, marker = :diamond, markersize = 20)
+                CairoMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance3[T], label = "B/w Agent 2 & Agent 3", color = :purple, marker = :circle, markersize = 20)
+                CairoMakie.lines!(ax4, 0:planning_horizon-1, [0.2 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+                fig[2,1] = CairoMakie.Legend(fig, ax4, framevisible = false, orientation = :horizontal)
+
+                CairoMakie.save("./data/relaxably_feasible/GOOP_plots/" * "rfp_GOOP_distance_$(ii)_w$jj" * ".png", fig)
+                fig
+            end
         end
     end
 

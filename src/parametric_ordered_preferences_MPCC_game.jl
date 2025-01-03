@@ -416,6 +416,9 @@ function solve_relaxed_pop_game(
 
     if isnothing(initial_guess)
         initial_guess = zeros(total_dim(problem))
+    else
+        # warmstart duals as zeros 
+        initial_guess = vcat(initial_guess, zeros(total_dim(problem) - length(initial_guess)))
     end
 
     complementarity_residual = 1.0
