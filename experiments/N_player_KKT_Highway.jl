@@ -295,8 +295,8 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
         println("initial_state3:", initial_state3)
 
         # Generate multiple equilibrium solutions
-        n_samples = 10
-        @showprogress desc="    Using different initial guesses..." for jj in 1:n_samples
+        warmstart_samples = 10
+        @showprogress desc="    Using different initial guesses..." for jj in 1:warmstart_samples
             if jj == 1
                 # initial guess is all zeros
                 warmstart_solution = nothing
@@ -305,7 +305,8 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
                 warmstart_x = [[initial_state1], [initial_state2], [initial_state3]]
                 warmstart_u = [[], [], []]
                 warmstart_solution = []
-                rand_u = 4 * rand(num_players, control_dim(dynamics)) .- 2.0 # between -2.0 and 2.0
+                # rand_u = 4 * rand(num_players, control_dim(dynamics)) .- 2.0 # between -2.0 and 2.0
+                rand_u = hcat(2.0*rand(num_players), 4*rand(num_players) .- 2.0) # ax > 0, -2.0 < ay < 2.0
                 for kk in 1:num_players
                     for i in 1:planning_horizon-1
                         push!(warmstart_u[kk], rand_u[kk,:])
