@@ -256,7 +256,7 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
     end
 
     # Run the experiment
-    @showprogress desc="Running problem instances..." for ii in [2] #1:num_samples
+    @showprogress desc="Running problem instances..." for ii in 1:num_samples
         # Load problem data
         problem_data = JLD2.load_object("./data/relaxably_feasible/problem/rfp_$ii.jld2")
 
