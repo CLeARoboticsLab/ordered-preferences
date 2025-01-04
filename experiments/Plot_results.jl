@@ -42,9 +42,9 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=6)
         push!(goop_slack, goop_data["slacks"])
         push!(baseline_slack, [baseline_data[jj]["slacks"] for jj in 1:num_penalty])
 
-        # Collect goop and baseline primal values
-        push!(goop_primals, goop_data["primals"])
-        push!(baseline_primals, [baseline_data[jj]["primals"] for jj in 1:num_penalty])
+        # # Collect goop and baseline primal values
+        # push!(goop_primals, goop_data["primals"])
+        # push!(baseline_primals, [baseline_data[jj]["primals"] for jj in 1:num_penalty])
 
         # Plot for player 1
         desired_size = [20, 10] #cm, double column
@@ -149,20 +149,56 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=6)
     CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_Monte_Carlo2_level2" * ".pdf", fig2, pt_per_unit = 1)
     
     # (new) Plot ||z₁ - z₁ₐ|| using goop_primals and baseline_primals
+    warmstart_samples = 10
+    @showprogress desc="Preparing ||z₁ - z₁ₐ|| data..." for ii in 1:num_samples
+        filename = "rfp_$(ii)_sol.jld2"
+
+        # Collect baseline primal values
+        for kk in 1:num_penalty
+            push!(baseline_data, load_object("data/relaxably_feasible/Baseline_solution/$kk/$filename"))
+        end
+        push!(baseline_primals, [baseline_data[kk]["primals"] for kk in 1:num_penalty])
+        
+        # Collect goop primal values
+        for jj in 1:warmstart_samples
+            filename_w = "rfp_$(ii)_w$(jj)_sol.jld2"
+            try
+                goop_data = load_object("data/relaxably_feasible/GOOP_solution/$filename_w")
+                push!(goop_primals, goop_data["primals"])
+            catch e
+                # placeholder
+                goop_data = load_object("data/relaxably_feasible/GOOP_solution/rfp_$(ii)_w1_sol.jld2")
+                push!(goop_primals, goop_data["primals"])
+            end
+        end
+
+        # Initialize baseline_data for next round
+        baseline_data = Dict[]
+    end
+    
+    # Group goop primals over all warmstarts
+    goop_primals_grouped = [goop_primals[i:i+warmstart_samples-1] for i in 1:warmstart_samples:length(goop_primals)]
+
     num_players = 3
     delta_z = Float64[]
-    for ii in 1:size(goop_primals)[1]
+    l1_differences = Float64[]
+    for ii in 1:num_samples
         for jj in 1:num_penalty
-            push!(delta_z, norm(vcat([goop_primals[ii][kk][1:30] for kk in 1:num_players]...) - 
-            vcat([baseline_primals[ii][jj][kk][1:30] for kk in 1:num_players]...),1))
+            for ll in 1:warmstart_samples
+                push!(l1_differences, norm(vcat([goop_primals_grouped[ii][ll][kk][1:30] for kk in 1:num_players]...) - 
+                vcat([baseline_primals[ii][jj][kk][1:30] for kk in 1:num_players]...),1))
+            end
+            push!(delta_z, minimum(l1_differences))
+            empty!(l1_differences)
         end
     end
-    Main.@infiltrate
     desired_size = [9.2, 9.2] #cm, single column
+    categories_w = vcat([1:num_penalty for i in 1:num_samples]...)
+    colors_mc_w = vcat([[[colormap[a*i] for i in 1:num_penalty]...] for _ in 1:num_samples]...)
     fig = CairoMakie.Figure(size = (desired_size[1]*cm_to_pt, desired_size[2]*cm_to_pt))
     xticks = (1:num_penalty, vcat(["0.1"], [string(Int(i)) for i in 1:num_penalty-1]))
     ax1 = CairoMakie.Axis(fig[1,1], title=L" ||z_{1} - z_{1,\alpha} ||", xticks = xticks, xlabel = L"\alpha ~(\times 10)")
-    rainclouds!(ax1, categories, delta_z; cloud_width = 2.0, boxplot_width=0.2, side=:right, violin_limits=extrema, color=colors_mc)
+    rainclouds!(ax1, categories_w, delta_z; cloud_width = 2.0, boxplot_width=0.2, side=:right, violin_limits=extrema, color=colors_mc_w)
     CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_distance_bw_primals" * ".pdf", fig, pt_per_unit = 1)
 
 

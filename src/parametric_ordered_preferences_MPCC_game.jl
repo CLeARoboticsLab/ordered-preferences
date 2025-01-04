@@ -491,8 +491,8 @@ function solve_relaxed_pop_game(
             break
         end
 
-        # Update initial_guess
-        initial_guess = zeros(total_dim(problem))
+        ## Update initial_guess
+        # initial_guess = zeros(total_dim(problem))
         # if complementarity_residual < 2.0 * tolerance
         #     for i in 1:length(problem.objectives)
         #         initial_guess[first(problem.trajectory_idx[i])] = solution.variables[first(problem.trajectory_idx[i])]

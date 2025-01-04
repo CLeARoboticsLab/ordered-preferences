@@ -178,7 +178,7 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
     # Algorithm setting
     ϵ = 1.1
     κ = 0.1
-    max_iterations = 8
+    max_iterations = 6
     tolerance = 5e-2
     relaxation_mode = :standard
 
