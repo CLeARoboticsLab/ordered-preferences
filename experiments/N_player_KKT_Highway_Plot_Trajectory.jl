@@ -308,20 +308,20 @@ function plot_trajectories(;num_samples = 100, num_penalty = 6)
     baseline_label = ["1", "10", "20", "30", "40", "50"]
     baseline_data = Dict[]
 
-    @showprogress for ii in setdiff(1:num_samples, [23, 24, 25, 26, 27, 28])
+    @showprogress for ii in 1:num_samples #setdiff(1:num_samples, [23, 24, 25, 26, 27, 28])
         # 1. Plot GOOP
         problem_data = JLD2.load_object("./data/relaxably_feasible/problem/rfp_$ii.jld2")
         filename = "rfp_$(ii)_sol.jld2"
-        goop_data = load_object("data/relaxably_feasible/GOOP_solution/$filename")
+        # goop_data = load_object("data/relaxably_feasible/GOOP_solution/$filename")
 
         goal_position1 = Observable([0.9, 0.0])
         initial_state1 = Observable(problem_data["initial_state1"])
         initial_state2 = Observable(problem_data["initial_state2"])
         initial_state3 = Observable(problem_data["initial_state3"])
 
-        goop_strategy1 = Observable(goop_data["strategy1"])
-        goop_strategy2 = Observable(goop_data["strategy2"])
-        goop_strategy3 = Observable(goop_data["strategy3"])
+        # goop_strategy1 = Observable(goop_data["strategy1"])
+        # goop_strategy2 = Observable(goop_data["strategy2"])
+        # goop_strategy3 = Observable(goop_data["strategy3"])
 
         figure = GLMakie.Figure(size = (400, 500)) #(5,4)
         axis = GLMakie.Axis(figure[1, 1]; aspect = GLMakie.DataAspect(), limits = ((-0.5, 1), (-0.25, 0.25)), yticks = [-0.2, 0.2], xticks = [0.0, 1.0])
@@ -364,13 +364,25 @@ function plot_trajectories(;num_samples = 100, num_penalty = 6)
         )
 
         # Visualize trajectories
-        goop_strategy1 = GLMakie.@lift OpenLoopStrategy($goop_strategy1.xs, $goop_strategy1.us)
-        goop_strategy2 = GLMakie.@lift OpenLoopStrategy($goop_strategy2.xs, $goop_strategy2.us)
-        goop_strategy3 = GLMakie.@lift OpenLoopStrategy($goop_strategy3.xs, $goop_strategy3.us)
-        
-        GLMakie.plot!(axis, goop_strategy1, color = :blue)
-        GLMakie.plot!(axis, goop_strategy2, color = :red)
-        GLMakie.plot!(axis, goop_strategy3, color = :green)
+        warmstart_samples = 10
+        for jj in 1:warmstart_samples 
+            try
+                filename_w = "rfp_$(ii)_w$(jj)_sol.jld2"
+                goop_data = load_object("data/relaxably_feasible/GOOP_solution/$filename_w")
+                goop_strategy1 = Observable(goop_data["strategy1"])
+                goop_strategy2 = Observable(goop_data["strategy2"])
+                goop_strategy3 = Observable(goop_data["strategy3"])
+                goop_strategy1 = GLMakie.@lift OpenLoopStrategy($goop_strategy1.xs, $goop_strategy1.us)
+                goop_strategy2 = GLMakie.@lift OpenLoopStrategy($goop_strategy2.xs, $goop_strategy2.us)
+                goop_strategy3 = GLMakie.@lift OpenLoopStrategy($goop_strategy3.xs, $goop_strategy3.us)
+                
+                GLMakie.plot!(axis, goop_strategy1, color = :blue)
+                GLMakie.plot!(axis, goop_strategy2, color = :red)
+                GLMakie.plot!(axis, goop_strategy3, color = :green)
+            catch e
+                println("Error: $e")
+            end
+        end
 
         # 2. Plot Baseline (only 2,4,6)
         for jj in 1:num_penalty
