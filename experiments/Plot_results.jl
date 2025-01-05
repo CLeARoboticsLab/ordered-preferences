@@ -149,7 +149,7 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=6)
     CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_Monte_Carlo2_level2" * ".pdf", fig2, pt_per_unit = 1)
     
     # (new) Plot ||z₁ - z₁ₐ|| using goop_primals and baseline_primals
-    warmstart_samples = 10
+    warmstart_samples = 20
     @showprogress desc="Preparing ||z₁ - z₁ₐ|| data..." for ii in 1:num_samples
         filename = "rfp_$(ii)_sol.jld2"
 
