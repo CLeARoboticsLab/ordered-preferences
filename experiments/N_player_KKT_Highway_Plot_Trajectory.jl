@@ -364,7 +364,7 @@ function plot_trajectories(;num_samples = 100, num_penalty = 6)
         )
 
         # Visualize trajectories
-        warmstart_samples = 10
+        warmstart_samples = 20
         for jj in 1:warmstart_samples 
             try
                 filename_w = "rfp_$(ii)_w$(jj)_sol.jld2"
