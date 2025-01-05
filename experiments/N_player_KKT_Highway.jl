@@ -295,7 +295,7 @@ function demo(; verbose = false, num_samples = 10, check_equilibrium = false, fi
         println("initial_state3:", initial_state3)
 
         # Generate multiple equilibrium solutions
-        warmstart_samples = 10
+        warmstart_samples = 20
         @showprogress desc="    Using different initial guesses..." for jj in 1:warmstart_samples
             if jj == 1
                 # initial guess is all zeros
