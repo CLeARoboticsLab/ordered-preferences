@@ -115,6 +115,8 @@ function ParametricOrderedPreferencesMPCCGame(;
 
         if is_prioritized_constraint[player_idx][priority_level]
 
+            # Main.@infiltrate
+            
             slacks_ii = last(z[Block(1)], slack_dimension_ii)
 
             objective_ii = 15*sum(slacks_ii)
