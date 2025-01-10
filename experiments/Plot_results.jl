@@ -2,12 +2,13 @@ module Plot_results
 
 using JLD2, CairoMakie, ProgressMeter
 using LinearAlgebra: norm
+using Statistics: mean, std
 
 # 8e-2: [100, 78, 71, 67, 64, 51, 46, 38]
 # 1e-1: [100, 78, 71, 67, 64,57, 51, 46, 38, 37, 20, 17]
 # 2e-1: [1, 10,13,16,17,20, 38, 39, 42, 46, 51, 55, 57, 64, 65, 67, 71, 75, 78, 96, 100]
 
-function plot_goop_vs_penalty(;num_samples=100, num_penalty=6)
+function plot_goop_vs_penalty(;num_samples=100, num_penalty=6, warmstart_samples = 20)
 
     colors = 1:num_penalty
     colorrange = (1, num_penalty)
@@ -19,6 +20,7 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=6)
     Δ_slacks_2 = Vector[]
 
     goop_slack = Vector[]
+    goop_slacks_initial_guesses = Vector[]
     baseline_slack = Vector[]
 
     goop_primals = Vector[]
@@ -41,6 +43,19 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=6)
         # Collect goop and baseline slacks
         push!(goop_slack, goop_data["slacks"])
         push!(baseline_slack, [baseline_data[jj]["slacks"] for jj in 1:num_penalty])
+
+        # Collect goop slacks for all initial guesses
+        for jj in 1:warmstart_samples
+            filename_w = "rfp_$(ii)_w$(jj)_sol.jld2"
+            try
+                goop_data_i = load_object("data/relaxably_feasible/GOOP_solution/$filename_w")
+                push!(goop_slacks_initial_guesses, goop_data_i["slacks"])
+            catch e
+                # placeholder
+                goop_data_i = load_object("data/relaxably_feasible/GOOP_solution/rfp_$(ii)_w1_sol.jld2")
+                push!(goop_slacks_initial_guesses, goop_data_i["slacks"])
+            end
+        end
 
         # # Collect goop and baseline primal values
         # push!(goop_primals, goop_data["primals"])
@@ -149,7 +164,6 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=6)
     CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_Monte_Carlo2_level2" * ".pdf", fig2, pt_per_unit = 1)
     
     # (new) Plot ||z₁ - z₁ₐ|| using goop_primals and baseline_primals
-    warmstart_samples = 20
     @showprogress desc="Preparing ||z₁ - z₁ₐ|| data..." for ii in 1:num_samples
         filename = "rfp_$(ii)_sol.jld2"
 
@@ -263,6 +277,58 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=6)
     rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\tilde{J}^3_2 - J^3_2", xticks = xticks, xlabel = L"\alpha ~(\times 10^1)"), categories, delta_slack_player3_level2; cloud_width = 2.0, boxplot_width=0.2, side=:right, color=colors_mc)
     CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_Monte_Carlo3_player3" * ".pdf", fig, pt_per_unit = 1)
     
+    # (new) Plot Monte Carlo 3 based on 20 initial guesses
+
+    # Group goop slacks over all warmstarts
+    goop_slacks_grouped = [goop_slacks_initial_guesses[i:i+warmstart_samples-1] for i in 1:warmstart_samples:length(goop_slacks_initial_guesses)]
+    
+    delta_slack_player1_level3 = [baseline_slack[ii][jj][1]-minimum([goop_slacks_grouped[ii][kk][1] for kk in 1:warmstart_samples]) for ii in 1:n_samples for jj in 1:num_penalty]
+    delta_slack_player1_level2 = [baseline_slack[ii][jj][2]-minimum([goop_slacks_grouped[ii][kk][2] for kk in 1:warmstart_samples]) for ii in 1:n_samples for jj in 1:num_penalty]
+    delta_slack_player2_level3 = [baseline_slack[ii][jj][3]-minimum([goop_slacks_grouped[ii][kk][3] for kk in 1:warmstart_samples]) for ii in 1:n_samples for jj in 1:num_penalty]
+    delta_slack_player2_level2 = [baseline_slack[ii][jj][4]-minimum([goop_slacks_grouped[ii][kk][4] for kk in 1:warmstart_samples]) for ii in 1:n_samples for jj in 1:num_penalty]
+    delta_slack_player3_level3 = [baseline_slack[ii][jj][5]-minimum([goop_slacks_grouped[ii][kk][5] for kk in 1:warmstart_samples]) for ii in 1:n_samples for jj in 1:num_penalty]
+    delta_slack_player3_level2 = [baseline_slack[ii][jj][6]-minimum([goop_slacks_grouped[ii][kk][6] for kk in 1:warmstart_samples]) for ii in 1:n_samples for jj in 1:num_penalty]
+    
+    for i in 1:num_penalty
+        println("mean(delta_slack_player1_level3[$(i):6:end]):", mean(delta_slack_player1_level3[i:6:end])) # α = 1,...,50
+        println("std(delta_slack_player1_level3[$(i):6:end]):", std(delta_slack_player1_level3[i:6:end]))
+    end
+    for i in 1:num_penalty
+        println("mean(delta_slack_player1_level2[$(i):6:end]):", mean(delta_slack_player1_level2[i:6:end]))
+        println("std(delta_slack_player1_level2[$(i):6:end]):", std(delta_slack_player1_level2[i:6:end]))
+    end
+    for i in 1:num_penalty
+        println("mean(delta_slack_player2_level3[$(i):6:end]):", mean(delta_slack_player2_level3[i:6:end]))
+        println("std(delta_slack_player2_level3[$(i):6:end]):", std(delta_slack_player2_level3[i:6:end]))
+    end
+    for i in 1:num_penalty
+        println("mean(delta_slack_player2_level2[$(i):6:end]):", mean(delta_slack_player2_level2[i:6:end]))
+        println("std(delta_slack_player2_level2[$(i):6:end]):", std(delta_slack_player2_level2[i:6:end]))
+    end
+    for i in 1:num_penalty
+        println("mean(delta_slack_player3_level3[$(i):6:end]):", mean(delta_slack_player3_level3[i:6:end]))
+        println("std(delta_slack_player3_level3[$(i):6:end]):", std(delta_slack_player3_level3[i:6:end]))
+    end
+    for i in 1:num_penalty
+        println("mean(delta_slack_player3_level2[$(i):6:end]):", mean(delta_slack_player3_level2[i:6:end]))
+        println("std(delta_slack_player3_level2[$(i):6:end]):", std(delta_slack_player3_level2[i:6:end]))
+    end
+
+    fig = CairoMakie.Figure(size = (desired_size[1]*cm_to_pt, desired_size[2]*cm_to_pt))
+    rainclouds!(CairoMakie.Axis(fig[1,1], title=L"\tilde{J}^1_3 - J^1_3", xticks = xticks, xlabel = L"\alpha ~(\times 10^1)"), categories, delta_slack_player1_level3; cloud_width = 2.0, boxplot_width=0.2, side=:right, color=colors_mc)
+    rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\tilde{J}^1_2 - J^1_2", xticks = xticks, xlabel = L"\alpha ~(\times 10^1)"), categories, delta_slack_player1_level2; cloud_width = 2.0, boxplot_width=0.2, side=:right, color=colors_mc)
+    CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_Monte_Carlo3_player1_$warmstart_samples" * ".pdf", fig, pt_per_unit = 1)
+
+    fig = CairoMakie.Figure(size = (desired_size[1]*cm_to_pt, desired_size[2]*cm_to_pt))
+    rainclouds!(CairoMakie.Axis(fig[1,1], title=L"\tilde{J}^2_3 - J^2_3", xticks = xticks, xlabel = L"\alpha ~(\times 10^1)"), categories, delta_slack_player2_level3; cloud_width = 2.0, boxplot_width=0.2, side=:right, color=colors_mc)
+    rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\tilde{J}^2_2 - J^2_2", xticks = xticks, xlabel = L"\alpha ~(\times 10^1)"), categories, delta_slack_player2_level2; cloud_width = 2.0, boxplot_width=0.2, side=:right, color=colors_mc)
+    CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_Monte_Carlo3_player2_$warmstart_samples" * ".pdf", fig, pt_per_unit = 1)
+    
+    fig = CairoMakie.Figure(size = (desired_size[1]*cm_to_pt, desired_size[2]*cm_to_pt))
+    rainclouds!(CairoMakie.Axis(fig[1,1], title=L"\tilde{J}^3_3 - J^3_3", xticks = xticks, xlabel = L"\alpha ~(\times 10^1)"), categories, delta_slack_player3_level3; cloud_width = 2.0, boxplot_width=0.2, side=:right, color=colors_mc)
+    rainclouds!(CairoMakie.Axis(fig[1,2], title=L"\tilde{J}^3_2 - J^3_2", xticks = xticks, xlabel = L"\alpha ~(\times 10^1)"), categories, delta_slack_player3_level2; cloud_width = 2.0, boxplot_width=0.2, side=:right, color=colors_mc)
+    CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_Monte_Carlo3_player3_$warmstart_samples" * ".pdf", fig, pt_per_unit = 1)
+
     # Plot Monte Carlo 4 for maximum violation
     # Issue: not getting numerically zero values for some slacks ex) maximum(vcat(goop_primals[ii]...)[320:339])
     max_slack_player1_level3 = [vcat(baseline_primals[ii][jj]...)[31]-vcat(goop_primals[ii]...)[31] for ii in 1:n_samples for jj in 1:num_penalty]
