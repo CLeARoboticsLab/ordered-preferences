@@ -3,7 +3,6 @@ module N_player_KKT_Intersection
 using TrajectoryGamesExamples: UnicycleDynamics, planar_double_integrator
 using TrajectoryGamesBase:
     OpenLoopStrategy, unflatten_trajectory, state_dim, control_dim, control_bounds
-using CairoMakie: CairoMakie
 using GLMakie: GLMakie, Observable
 using BlockArrays
 using JLD2, ProgressMeter, Distributions, Random, BenchmarkTools
@@ -292,31 +291,6 @@ function demo(; verbose = false)
     GLMakie.hidedecorations!(ax)
     GLMakie.hidespines!(ax)
 
-    # Visualize initialstates 
-    GLMakie.scatter!(
-        ax,
-        GLMakie.@lift([GLMakie.Point2f($θ1[1:2]), GLMakie.Point2f($θ2[1:2])]),
-        markersize = 20,
-        color = [:blue, :red]
-    )
-
-    # Visualize goal positions
-    GLMakie.scatter!(
-        ax,
-        GLMakie.@lift(GLMakie.Point2f($goal_position1)),
-        markersize = 20,
-        marker = :star5,
-        color = :blue,
-    )
-
-    GLMakie.scatter!(
-        ax,
-        GLMakie.@lift(GLMakie.Point2f($goal_position2)),
-        markersize = 20,
-        marker = :star5,
-        color = :red,
-    )
-
     # Draw intersection
     offset = 0.2
 
@@ -366,24 +340,54 @@ function demo(; verbose = false)
     GLMakie.arrows!(xs, ys, us, vs; arrowsize = 15, lengthscale = 0.5, arrowcolor = :white, linecolor = :white, linewidth = 3)
 
     # Visuliaze trajectories
-    strategy1 = GLMakie.@lift OpenLoopStrategy($strategy[1].xs, $strategy[1].us)
-    strategy2 = GLMakie.@lift OpenLoopStrategy($strategy[2].xs, $strategy[2].us)
-    GLMakie.plot!(ax, strategy1, color = :blue)
-    GLMakie.plot!(ax, strategy2, color = :red)
+    goop_data = load_object("data/Intersection/GOOP_solution/intersection.jld2")
+    goop_strategy1 = Observable(goop_data["strategy1"])
+    goop_strategy2 = Observable(goop_data["strategy2"])
+    # goop_strategy3 = Observable(goop_data["strategy3"])
+    goop_strategy1 = GLMakie.@lift OpenLoopStrategy($goop_strategy1.xs, $goop_strategy1.us)
+    goop_strategy2 = GLMakie.@lift OpenLoopStrategy($goop_strategy2.xs, $goop_strategy2.us)
+    # goop_strategy3 = GLMakie.@lift OpenLoopStrategy($goop_strategy3.xs, $goop_strategy3.us)
+    
+    GLMakie.plot!(ax, goop_strategy1, color = :blue)
+    GLMakie.plot!(ax, goop_strategy2, color = :red)
+    # GLMakie.plot!(ax, goop_strategy3, color = :green)
+    # strategy1 = GLMakie.@lift OpenLoopStrategy($strategy[1].xs, $strategy[1].us)
+    # strategy2 = GLMakie.@lift OpenLoopStrategy($strategy[2].xs, $strategy[2].us)
+    # GLMakie.plot!(ax, strategy1, color = :blue)
+    # GLMakie.plot!(ax, strategy2, color = :red)
 
+
+        # Visualize initial states 
+        GLMakie.scatter!(
+            ax,
+            GLMakie.@lift([GLMakie.Point2f($θ1[1:2]), GLMakie.Point2f($θ2[1:2])]),
+            markersize = 20,
+            color = [:blue, :red]
+        )
+    
+        # Visualize goal positions
+        GLMakie.scatter!(
+            ax,
+            GLMakie.@lift(GLMakie.Point2f($goal_position1)),
+            markersize = 20,
+            marker = :star5,
+            color = :blue,
+        )
+    
+        GLMakie.scatter!(
+            ax,
+            GLMakie.@lift(GLMakie.Point2f($goal_position2)),
+            markersize = 20,
+            marker = :star5,
+            color = :red,
+        )
+    
 
     # Save img 
     GLMakie.save("data/Intersection/trajectory" * ".png", figure)
 
 
     Main.@infiltrate
-
-
-
-
-
-
-
     
     # # Store speed data for Intersection
     # horizontal_speed_data = Vector{Vector{Float64}}[]
