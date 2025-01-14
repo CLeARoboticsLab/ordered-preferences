@@ -440,7 +440,7 @@ function solve_relaxed_pop_game(
             println("ii: ", ii)
             println("status: ", solution.status)
             # TODO: Automate T = 30 if N = 5, T = 60 if N = 10
-            T = 30
+            T = 42
             solution_primals = [solution.primals[i][1:T] for i in 1:length(problem.objectives)]
             trajectory_primals = BlockArray(vcat(solution_primals...), [T, T, T])
             println("P1 (x) trajectory: ", trajectory_primals[Block(1)][1:6:end])
