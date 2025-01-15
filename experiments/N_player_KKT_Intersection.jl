@@ -111,14 +111,14 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
                 ]
             end,
 
-            # # Keep center (yellow) line
-            # function (z,θ)
-            #     (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
-            #     mapreduce(vcat, 1:length(xs)) do k
-            #         px, py, vx, vy = xs[k]
-            #         -py + 0.0 # py ≤ 0.0
-            #     end
-            # end,
+            # Keep center (yellow) line
+            function (z,θ)
+                (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
+                mapreduce(vcat, 1:length(xs)) do k
+                    px, py, vx, vy = xs[k]
+                    -py + 0.0 # py ≤ 0.0
+                end
+            end,
 
             # Drive under speed limit 
             function (z,θ)
@@ -140,6 +140,16 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
                 end
             end,
 
+             # Drive under speed limit 
+             function (z,θ)
+                (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
+                mapreduce(vcat, 1:length(xs)) do k
+                    px, py, vx, vy = xs[k]
+                    velocity_constraints = vcat(vx + 1.5, -vx + 1.5, vy + 1.5, -vy + 1.5)
+                    vcat(velocity_constraints) 
+                end
+            end,
+
             # reach the goal.
             function (z, θ)
                 (; xs, us) = unflatten_trajectory(z[Block(1)], state_dimension, control_dimension)
@@ -155,7 +165,7 @@ function get_setup(num_players; dynamics = UnicycleDynamics, planning_horizon = 
     ]
 
     # Specify prioritized constraint
-    is_prioritized_constraint = [[true, true], [true, true]] #, [true, true]]
+    is_prioritized_constraint = [[true, true, true], [true, true, true]] #, [true, true]]
 
     # Shared constraints
     function shared_equality_constraints(z, θ)
