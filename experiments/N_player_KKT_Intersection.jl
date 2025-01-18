@@ -216,7 +216,7 @@ function demo(; map_end = 7, lane_width = 2, verbose = false)
     control_bounds = (; lb = [-2.0, -2.0], ub = [2.0, 2.0])
     dynamics = planar_double_integrator(; dt = 1.0, control_bounds) # x := (px, py, vx, vy) and u := (ax, ay).
     planning_horizon = 7
-    collision_avoidance = 1.0
+    collision_avoidance = 1.3
 
     (; problem, flatten_parameters) = get_setup(
         num_players;
@@ -283,7 +283,7 @@ function demo(; map_end = 7, lane_width = 2, verbose = false)
     )
 
     # Player 2
-    initial_state2 = Observable([0.5, -6.0, 0.0, 1.5])
+    initial_state2 = Observable([0.5, -5.0, 0.0, 1.0])
     goal_position2 = Observable([1.0, 6.0])
     θ2 = GLMakie.@lift flatten_parameters(; 
         initial_state = $initial_state2,

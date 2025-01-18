@@ -367,7 +367,7 @@ function solve(
         parameter_value;
         initial_guess = z0,
         verbose = verbose,
-        cumulative_iteration_limit = 500000,
+        cumulative_iteration_limit = 1000000,
         proximal_perturbation = 1e-2,
         major_iteration_limit = 10000,
         minor_iteration_limit = 15000,
