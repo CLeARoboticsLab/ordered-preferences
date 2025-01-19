@@ -8,7 +8,7 @@ function draw_intersection_scaled()
     map_end = 7 # Length of the road 
     offset = 0.2
     fig1 = Figure(size = (500, 500))
-    ax = Axis(fig1[1:2, 1:2], aspect = 1, xgridvisible = false, ygridvisible = false, backgroundcolor = :lightgreen)
+    ax = Axis(fig1[1:3, 1:6], aspect = 1, xgridvisible = false, ygridvisible = false, backgroundcolor = :lightgreen)
     hidedecorations!(ax)
     hidespines!(ax)
 
@@ -83,10 +83,11 @@ function draw_intersection_scaled()
             [blue_trajectory_ys[i], blue_trajectory_ys[i+1]] ./ 10,
             color = blue_trajectory_vxs[i],
             colormap = :blues,
-            colorrange = (0, 30),
+            colorrange = (0, 25),
             linewidth = 2
         )
     end
+    Colorbar(fig1[3, 2:5], limits = (0, 25), flipaxis = false, label = "Player 1's speed [m/s]", colormap = :blues, vertical = false)
 
     # Plot red trajectory: explicitly show distance-to-goal relaxation
     red_trajectory_xs = [data[1] for data in goop_strategy2_xs] .* 10
@@ -160,13 +161,13 @@ function draw_intersection_scaled()
         )
     end
     scatterlines!(ax2, 0:planning_horizon-1, red_trajectory_vxs, label = "Robot 2", color = :red)
-    lines!(ax2, 0:planning_horizon-1, [1.5 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+    lines!(ax2, 0:planning_horizon-1, [15 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
 
     # Visualize vertical speed
     ax3 = Axis(fig[1, 2]; xlabel = "time step", ylabel = "speed [m/s]", title = "Vertical Speed")
     scatterlines!(ax3, 0:planning_horizon-1, blue_trajectory_vys, label = "Vehicle 1", color = :blue)
     scatterlines!(ax3, 0:planning_horizon-1, red_trajectory_vys, label = "Vehicle 2", color = :red)
-    lines!(ax3, 0:planning_horizon-1, [1.5 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
+    lines!(ax3, 0:planning_horizon-1, [15 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
 
     # Visualize distance bw vehicles , limits = (nothing, (collision_avoidance-0.05, 0.4)) 
     ax4 = Axis(fig[2, 1]; xlabel = "time step", ylabel = "distance [m]", title = "Distance bw robots")
@@ -185,5 +186,5 @@ function draw_intersection_scaled()
 end
 fig1, fig = draw_intersection_scaled()
 
-save("GOOP_intersection.pdf", fig1)
-save("GOOP_intersection_data.pdf", fig)
+save("data/Intersection/GOOP_intersection.pdf", fig1)
+save("data/Intersection/GOOP_intersection_data.pdf", fig)

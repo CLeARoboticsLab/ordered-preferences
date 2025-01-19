@@ -211,7 +211,7 @@ function plot_goop_vs_penalty(;num_samples=100, num_penalty=6, warmstart_samples
     colors_mc_w = vcat([[[colormap[a*i] for i in 1:num_penalty]...] for _ in 1:num_samples]...)
     fig = CairoMakie.Figure(size = (desired_size[1]*cm_to_pt, desired_size[2]*cm_to_pt))
     xticks = (1:num_penalty, vcat(["0.1"], [string(Int(i)) for i in 1:num_penalty-1]))
-    ax1 = CairoMakie.Axis(fig[1,1], title=L" ||z_{1} - z_{1,\alpha} ||", xticks = xticks, xlabel = L"\alpha ~(\times 10)")
+    ax1 = CairoMakie.Axis(fig[1,1], title=L" ||z_{1} - z_{1,\alpha} ||_1", xticks = xticks, xlabel = L"\alpha ~(\times 10)")
     rainclouds!(ax1, categories_w, delta_z; cloud_width = 2.0, boxplot_width=0.2, side=:right, violin_limits=extrema, color=colors_mc_w)
     CairoMakie.save("./data/relaxably_feasible/result_plots/[MC] rfp_GOOP_Baseline_distance_bw_primals" * ".pdf", fig, pt_per_unit = 1)
 
