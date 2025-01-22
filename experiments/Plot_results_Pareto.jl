@@ -21,7 +21,7 @@ function plot_goop_vs_penalty(;num_samples=2, num_penalty=50)
         
         # Plot for sum over all player 
         fig = CairoMakie.Figure(size = (300, 400))
-        ax1 = CairoMakie.Axis(fig[2, 1], xtickformat = "{:.1f}", xticks = WilkinsonTicks(3), yticks = WilkinsonTicks(3), xlabel=L"\sum_i {J}^i_3", ylabel=L"\sum_i {J}^i_2")
+        ax1 = CairoMakie.Axis(fig[2, 1], xtickformat = "{:.1f}", xticks = WilkinsonTicks(3), yticks = WilkinsonTicks(3), xlabel=L"J^1_3", ylabel=L"J^1_2")
         for jj in 1:num_penalty
             xs = baseline_data[jj]["slacks"][1] + baseline_data[jj]["slacks"][3] + baseline_data[jj]["slacks"][5]
             ys = baseline_data[jj]["slacks"][2] + baseline_data[jj]["slacks"][4] + baseline_data[jj]["slacks"][6]
@@ -36,7 +36,7 @@ function plot_goop_vs_penalty(;num_samples=2, num_penalty=50)
         CairoMakie.scatter!(ax1, Point2f.(xs,ys), color=:black, marker=:star5, markersize = 12) 
         CairoMakie.Colorbar(fig[1,1], colormap=colormap, label=L"\alpha", vertical=false, limits=(0, num_penalty))
 
-        CairoMakie.save("./data_pareto/[Pareto] rfp_GOOP_Baseline_$ii" * ".png", fig, px_per_unit = 8.33)
+        CairoMakie.save("./data_pareto/[Pareto] rfp_GOOP_Baseline_$(ii)_2" * ".pdf", fig, px_per_unit = 8.33)
         Main.@infiltrate
         # Initialize baseline_data for next round
         baseline_data = Dict[]

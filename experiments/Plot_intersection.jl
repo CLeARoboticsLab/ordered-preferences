@@ -8,7 +8,7 @@ function draw_intersection_scaled()
     map_end = 7 # Length of the road 
     offset = 0.2
     fig1 = Figure(size = (500, 500))
-    ax = Axis(fig1[1:3, 1:6], aspect = 1, xgridvisible = false, ygridvisible = false, backgroundcolor = :lightgreen)
+    ax = Axis(fig1[1:3, 1:6], aspect = 1, xgridvisible = false, ygridvisible = false)
     hidedecorations!(ax)
     hidespines!(ax)
 
@@ -87,7 +87,7 @@ function draw_intersection_scaled()
             linewidth = 2
         )
     end
-    Colorbar(fig1[3, 2:5], limits = (0, 25), flipaxis = false, label = "Player 1's speed [m/s]", colormap = :blues, vertical = false)
+    Colorbar(fig1[3, 2:5], limits = (0, 25), flipaxis = false, label = "Vehicle 1's speed [m/s]", colormap = :blues, vertical = false)
 
     # Plot red trajectory: explicitly show distance-to-goal relaxation
     red_trajectory_xs = [data[1] for data in goop_strategy2_xs] .* 10
