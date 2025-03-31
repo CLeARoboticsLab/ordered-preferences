@@ -8,4 +8,4 @@ We study noncooperative games, in which each player's objective is composed of a
 
 ## Contact 
 
-> Note: For any questions on how to use this code, do not hesitate to reach out to Dong Ho Lee at [leedh0124@utexas.edu](mailto:leedh0124@utexa.edu) or open an issue.
+> Note: For any questions on how to use this code, do not hesitate to reach out to Dong Ho Lee at [leedh0124@utexas.edu](mailto:leedh0124@utexas.edu) or open an issue.
