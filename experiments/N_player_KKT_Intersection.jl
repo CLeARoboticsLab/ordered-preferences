@@ -5,7 +5,7 @@ using TrajectoryGamesBase:
     OpenLoopStrategy, unflatten_trajectory, state_dim, control_dim, control_bounds
 using GLMakie: GLMakie, Observable
 using BlockArrays
-using JLD2, ProgressMeter, Distributions, Random, BenchmarkTools
+using JLD2, ProgressMeter, Distributions, Random, BenchmarkTools, Dates
 
 using OrderedPreferences
 
@@ -206,13 +206,13 @@ end
 
 function demo(; map_end = 7, lane_width = 2, verbose = false)
     # Algorithm setting
-    ϵ = 1.1
-    κ = 0.1
-    max_iterations = 6
+    ϵ = 20
+    κ = 0.6
+    max_iterations = 10
     tolerance = 5e-2
     relaxation_mode = :standard
 
-    num_players = 2 #3
+    num_players = 2 
     control_bounds = (; lb = [-2.0, -2.0], ub = [2.0, 2.0])
     dynamics = planar_double_integrator(; dt = 1.0, control_bounds) # x := (px, py, vx, vy) and u := (ax, ay).
     planning_horizon = 7
@@ -262,10 +262,11 @@ function demo(; map_end = 7, lane_width = 2, verbose = false)
                 "slacks" => solution[min_residual_idx].slacks,
                 "strategy1" => strategies[1],
                 "strategy2" => strategies[2],
-                # "strategy3" => strategies[3],
                 "primals" => solution[min_residual_idx].primals,
             )
-            JLD2.save_object("./data/Intersection/GOOP_solution/intersection.jld2", solution_dict)
+            file_name = "intersection_"*string(now())*".jld2"
+            JLD2.save_object("./data/Intersection_closed_loop/GOOP_solution/$(file_name)", solution_dict)
+            # JLD2.save_object("./data/Intersection_closed_loop/GOOP_solution/intersection.jld2", solution_dict)
         end
 
         (; strategies, solution)
@@ -274,7 +275,8 @@ function demo(; map_end = 7, lane_width = 2, verbose = false)
 
     obstacle_position = Observable([0.25, 0.15]) # placeholder
     # Player 1
-    initial_state1 = Observable([-6.0, -1.0, 1.5, 0.0])
+    # initial_state1 = Observable([-6.0, -1.0, 1.5, 0.0])
+    initial_state1 = Observable([-4.16585, -1.21562, 2.16838, -0.431245])
     goal_position1 = Observable([6.0, -1.0])
     θ1 = GLMakie.@lift flatten_parameters(; # θ is a flat (column) vector of parameters
         initial_state = $initial_state1,
@@ -283,7 +285,8 @@ function demo(; map_end = 7, lane_width = 2, verbose = false)
     )
 
     # Player 2
-    initial_state2 = Observable([0.5, -5.0, 0.0, 1.0])
+    # initial_state2 = Observable([1.0, -5.0, 0.0, 1.0])
+    initial_state2 = Observable([0.808618, -3.75084, -0.382764, 1.49955])
     goal_position2 = Observable([1.0, 6.0])
     θ2 = GLMakie.@lift flatten_parameters(; 
         initial_state = $initial_state2,
@@ -303,10 +306,8 @@ function demo(; map_end = 7, lane_width = 2, verbose = false)
         "goal_position1" => goal_position1[],
         "initial_state2" => initial_state2[],
         "goal_position2" => goal_position2[],
-        # "initial_state3" => initial_state3[],
-        # "goal_position3" => goal_position3[],
     )
-    JLD2.save_object("./data/Intersection/problem/problem_data.jld2", problem_data)
+    JLD2.save_object("./data/Intersection_closed_loop/problem/problem_data.jld2", problem_data)
 
     strategy = GLMakie.@lift let 
         result = get_receding_horizon_solution($θ; warmstart_solution)
@@ -369,33 +370,29 @@ function demo(; map_end = 7, lane_width = 2, verbose = false)
     GLMakie.arrows!(xs, ys, us, vs; arrowsize = 15, lengthscale = 0.5, arrowcolor = :white, linecolor = :white, linewidth = 3)
 
     # Visuliaze trajectories
-    goop_data = load_object("data/Intersection/GOOP_solution/intersection.jld2")
-    # NOTE: For some reason, GLMakie plots trajectories after reflecting the points along y=x. 
-    # To fix this, we need to reflect the points along y=x before plotting them.
-    goop_strategy1_xs = Observable([vcat(v[2], v[1], v[3:end]) for v in goop_data["strategy1"].xs])
-    goop_strategy2_xs = Observable([vcat(v[2], v[1], v[3:end]) for v in goop_data["strategy2"].xs])
-    # goop_strategy3_xs = Observable([vcat(v[2], v[1], v[3:end]) for v in goop_data["strategy3"].xs])
-    goop_strategy1 = Observable(goop_data["strategy1"])
-    goop_strategy2 = Observable(goop_data["strategy2"])
-    # goop_strategy3 = Observable(goop_data["strategy3"])
+    # goop_data = load_object("data/Intersection_closed_loop/GOOP_solution/intersection.jld2")
+    # # NOTE: For some reason, GLMakie plots trajectories after reflecting the points along y=x. 
+    # # To fix this, we need to reflect the points along y=x before plotting them.
+    # goop_strategy1_xs = Observable([vcat(v[2], v[1], v[3:end]) for v in goop_data["strategy1"].xs])
+    # goop_strategy2_xs = Observable([vcat(v[2], v[1], v[3:end]) for v in goop_data["strategy2"].xs])
+    # goop_strategy1 = Observable(goop_data["strategy1"])
+    # goop_strategy2 = Observable(goop_data["strategy2"])
 
-    goop_strategy1 = GLMakie.@lift OpenLoopStrategy($goop_strategy1_xs, $goop_strategy1.us)
-    goop_strategy2 = GLMakie.@lift OpenLoopStrategy($goop_strategy2_xs, $goop_strategy2.us)
-    # goop_strategy3 = GLMakie.@lift OpenLoopStrategy($goop_strategy3_xs, $goop_strategy3.us)
+    # goop_strategy1 = GLMakie.@lift OpenLoopStrategy($goop_strategy1_xs, $goop_strategy1.us)
+    # goop_strategy2 = GLMakie.@lift OpenLoopStrategy($goop_strategy2_xs, $goop_strategy2.us)
     
-    GLMakie.plot!(ax, goop_strategy1, color = :blue)
-    GLMakie.plot!(ax, goop_strategy2, color = :red)
-    # GLMakie.plot!(ax, goop_strategy3, color = :green)
-    # strategy1 = GLMakie.@lift OpenLoopStrategy($strategy[1].xs, $strategy[1].us)
-    # strategy2 = GLMakie.@lift OpenLoopStrategy($strategy[2].xs, $strategy[2].us)
-    # GLMakie.plot!(ax, strategy1, color = :blue)
-    # GLMakie.plot!(ax, strategy2, color = :red)
+    # GLMakie.plot!(ax, goop_strategy1, color = :blue)
+    # GLMakie.plot!(ax, goop_strategy2, color = :red)
+    strategy1 = GLMakie.@lift OpenLoopStrategy($strategy[1].xs, $strategy[1].us)
+    strategy2 = GLMakie.@lift OpenLoopStrategy($strategy[2].xs, $strategy[2].us)
+    GLMakie.plot!(ax, strategy1, color = :blue)
+    GLMakie.plot!(ax, strategy2, color = :red)
 
 
     # Visualize initial states 
     GLMakie.scatter!(
         ax,
-        GLMakie.@lift([GLMakie.Point2f($initial_state1), GLMakie.Point2f($initial_state2)]),
+        GLMakie.@lift([GLMakie.Point2f($θ1[1:2]), GLMakie.Point2f($θ2[1:2])]),
         markersize = 20,
         color = [:blue, :red]
     )
@@ -417,14 +414,26 @@ function demo(; map_end = 7, lane_width = 2, verbose = false)
     )
     
     # Save img 
-    GLMakie.save("data/Intersection/trajectory.png", figure)
+    # GLMakie.save("data/Intersection_closed_loop/trajectory.png", figure)
+
+    # closed_loop + receding horizon demo
+    time_step = 2
+    while time_step < 15
+        println("time_step: ", time_step)
+        GLMakie.save("data/Intersection_closed_loop/trajectory$(time_step).png", figure)
+        # Update the positions of the vehicles
+        println("Update initial state1")
+        θ1.val[1:state_dim(dynamics)] = first(strategy[]).xs[begin + 1] # Asynchronous update: mutate p1's initial state without triggering others
+        println("Update initial state2")
+        initial_state2[] = strategy[][2].xs[begin + 1]
+        time_step += 1
+    end
+
  
     # Store speed data for Intersection
     horizontal_speed_data = Vector{Vector{Float64}}[]
     vertical_speed_data = Vector{Vector{Float64}}[]
     openloop_distance1 = Vector{Float64}[]
-    openloop_distance2 = Vector{Float64}[]
-    openloop_distance3 = Vector{Float64}[]
 
     # Store openloop speed data
     push!(horizontal_speed_data, [vcat(strategy[][1].xs...)[3:4:end], vcat(strategy[][2].xs...)[3:4:end]])#, vcat(strategy[3].xs...)[3:4:end]])
@@ -432,8 +441,6 @@ function demo(; map_end = 7, lane_width = 2, verbose = false)
 
     # Store openloop distance data
     push!(openloop_distance1, [sqrt(sum((strategy[][1].xs[k][1:2] - strategy[][2].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-    # # push!(openloop_distance2, [sqrt(sum((strategy[1].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
-    # # push!(openloop_distance3, [sqrt(sum((strategy[2].xs[k][1:2] - strategy[3].xs[k][1:2]) .^ 2)) for k in 1:planning_horizon])
 
     # Visualize horizontal speed
     T = 1
@@ -441,7 +448,6 @@ function demo(; map_end = 7, lane_width = 2, verbose = false)
     ax2 = GLMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "speed", title = "Horizontal Speed")
     GLMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][1], label = "Vehicle 1", color = :blue)
     GLMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][2], label = "Vehicle 2", color = :red)
-    # GLMakie.scatterlines!(ax2, 0:planning_horizon-1, horizontal_speed_data[T][3], label = "Vehicle 3", color = :green)
     GLMakie.lines!(ax2, 0:planning_horizon-1, [1.5 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
     fig[2,1:2] = GLMakie.Legend(fig, ax2, framevisible = false, orientation = :horizontal)
 
@@ -449,21 +455,18 @@ function demo(; map_end = 7, lane_width = 2, verbose = false)
     ax3 = GLMakie.Axis(fig[1, 2]; xlabel = "time step", ylabel = "speed", title = "Vertical Speed")
     GLMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][1], label = "Vehicle 1", color = :blue)
     GLMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][2], label = "Vehicle 2", color = :red)
-    # GLMakie.scatterlines!(ax3, 0:planning_horizon-1, vertical_speed_data[T][3], label = "Vehicle 3", color = :green)
     GLMakie.lines!(ax3, 0:planning_horizon-1, [1.5 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
 
-    GLMakie.save("./data/Intersection/GOOP_plots/speed.png", fig)
+    GLMakie.save("./data/Intersection_closed_loop/GOOP_plots/speed.png", fig)
 
     # Visualize distance bw vehicles , limits = (nothing, (collision_avoidance-0.05, 0.4)) 
     fig = GLMakie.Figure() # limits = (nothing, (nothing, 0.7))
     ax4 = GLMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "distance", title = "Distance bw vehicles")
     GLMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance1[T], label = "B/w Agent 1 & Agent 2", color = :black, marker = :star5, markersize = 20)
-    # GLMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance2[T], label = "B/w Agent 1 & Agent 3", color = :orange, marker = :diamond, markersize = 20)
-    # GLMakie.scatterlines!(ax4, 0:planning_horizon-1, openloop_distance3[T], label = "B/w Agent 2 & Agent 3", color = :purple, marker = :circle, markersize = 20)
     GLMakie.lines!(ax4, 0:planning_horizon-1, [1.0 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
     fig[2,1] = GLMakie.Legend(fig, ax4, framevisible = false, orientation = :horizontal)
 
-    GLMakie.save("./data/Intersection/GOOP_plots/" * "distance_bw_vehicles.png", fig)
+    GLMakie.save("./data/Intersection_closed_loop/GOOP_plots/" * "distance_bw_vehicles.png", fig)
 
     # Store distance from center yellow line 
     distance_from_center = Vector{Vector{Float64}}[]
@@ -474,11 +477,10 @@ function demo(; map_end = 7, lane_width = 2, verbose = false)
     ax5 = GLMakie.Axis(fig[1, 1]; xlabel = "time step", ylabel = "distance", title = "Position from center yellow line")
     GLMakie.scatterlines!(ax5, 0:planning_horizon-1, distance_from_center[T][1], label = "Vehicle 1", color = :blue)
     GLMakie.scatterlines!(ax5, 0:planning_horizon-1, distance_from_center[T][2], label = "Vehicle 2", color = :red)
-    # GLMakie.scatterlines!(ax5, 0:planning_horizon-1, distance_from_center[T][3], label = "Vehicle 3", color = :green)
     GLMakie.lines!(ax5, 0:planning_horizon-1, [0.0 for _ in 0:planning_horizon-1], color = :black, linestyle = :dash)
     fig[2,1] = GLMakie.Legend(fig, ax5, framevisible = false, orientation = :horizontal)
 
-    GLMakie.save("./data/Intersection/GOOP_plots/" * "position_from_center.png", fig)
+    GLMakie.save("./data/Intersection_closed_loop/GOOP_plots/" * "position_from_center.png", fig)
     
 end
 

@@ -119,7 +119,7 @@ function ParametricOrderedPreferencesMPCCGame(;
             
             slacks_ii = last(z[Block(1)], slack_dimension_ii)
 
-            objective_ii = 15*sum(slacks_ii)
+            objective_ii = 5*sum(slacks_ii) #15
 
             # auxillary constraint: fᵢ(x,θ) + sᵢ ≥ 0 
             auxillary_constraints = prioritized_constraints_ii(x, θ) .+ slacks_ii
