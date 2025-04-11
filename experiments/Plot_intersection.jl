@@ -60,7 +60,7 @@ function create_map()
 end
 function create_fig2()
     # Visualize vertical speed, horizontal speed, ...
-    fig = Figure(size = (700, 700))
+    fig = Figure(size = (1000, 700))
     return fig
 end
 
@@ -261,19 +261,19 @@ function draw_intersection_closed_loop!(fig1, ax1, fig2, fig3, ax3, fig4, ax4, f
     plot_red_trajectory(ax1)
     Colorbar(fig1[1, 2:5], limits = (0, 20), flipaxis = true, label = "Vehicle 2's speed [m/s]", colormap = :reds, vertical = false)
 
-    # Visualize initial states 
-    scatter!(
-        ax1,
-        Point2f(initial_state1),
-        markersize = 20,
-        color = (:blue, 0.5)
-    )
-    scatter!(
-        ax1,
-        Point2f(initial_state2),
-        markersize = 20,
-        color = (:red,0.5)
-    )
+    # # Visualize initial states 
+    # scatter!(
+    #     ax1,
+    #     Point2f(initial_state1),
+    #     markersize = 20,
+    #     color = (:blue, 0.5)
+    # )
+    # scatter!(
+    #     ax1,
+    #     Point2f(initial_state2),
+    #     markersize = 20,
+    #     color = (:red,0.5)
+    # )
 
     # Plot interim open-loop trajectories
     T = 4
@@ -303,7 +303,7 @@ function draw_intersection_closed_loop!(fig1, ax1, fig2, fig3, ax3, fig4, ax4, f
     closed_loop_distance1 = [sqrt(sum((closed_loop_strategy1[k][1:2] - closed_loop_strategy2[k][1:2]) .^ 2)) for k in 1:closed_loop_horizon]
 
     # 1a. Visualize horizontal speed
-    axis2 = Axis(fig2[1, 1]; xlabel = "time step", ylabel = "speed [m/s]", xgridvisible = false, ygridvisible = false)
+    axis2 = Axis(fig2[1, 1]; xlabel = "time step", ylabel = "speed [m/s]", xgridvisible = false, ygridvisible = false, xlabelsize = 28, ylabelsize = 26, xticklabelsize = 28, yticklabelsize = 28)
     for i in 1:length(blue_trajectory_xs)-1
         scatterlines!(
             axis2,
@@ -338,7 +338,7 @@ function draw_intersection_closed_loop!(fig1, ax1, fig2, fig3, ax3, fig4, ax4, f
     lines!(axis2, 0:closed_loop_horizon-1, [1.5*scale_factor for _ in 0:closed_loop_horizon-1], color = :black, linestyle = :dash)
 
     # Visualize distance from goal position
-    axis3 = Axis(fig2[1, 2]; xlabel = "time step", ylabel = "distance [m]", xgridvisible = false, ygridvisible = false)
+    axis3 = Axis(fig2[1, 2]; xlabel = "time step", ylabel = "goal-reaching error [m]", xgridvisible = false, ygridvisible = false, xlabelsize = 28, ylabelsize = 26, xticklabelsize = 28, yticklabelsize = 28)
     closed_loop_strategy_end_position1 = Vector{Float64}[]
     closed_loop_strategy_end_position2 = Vector{Float64}[]
     for i in 1:n_step

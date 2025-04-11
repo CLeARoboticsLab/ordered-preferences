@@ -37,8 +37,6 @@ function demo(; time_step = 1, verbose = false)
     dynamics_dimension = state_dim(dynamics) + control_dim(dynamics)
     primal_dimension = dynamics_dimension * planning_horizon
 
-    # Common obstacle
-    obstacle_position = [0.25, 0.15]
 
     function get_receding_horizon_solution(θ, ii, jj; warmstart_solution)
         println("Solving for time step $(time_step)...")
@@ -195,7 +193,7 @@ function demo(; time_step = 1, verbose = false)
 
             # closed_loop + receding horizon demo
             while time_step < 15
-                GLMakie.save("data/Highway_closed_loop/trajectory$(time_step).png", figure)
+                GLMakie.save("data/Highway_closed_loop/GOOP_plots/trajectory$(time_step).png", figure)
             
                 # Update the positions of the vehicles
                 time_step += 1
