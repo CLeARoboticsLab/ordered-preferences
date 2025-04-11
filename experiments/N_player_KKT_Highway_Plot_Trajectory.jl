@@ -308,7 +308,7 @@ function plot_trajectories(;num_samples = 100, num_penalty = 6)
     baseline_label = ["1", "10", "20", "30", "40", "50"]
     baseline_data = Dict[]
 
-    @showprogress for ii in 1:num_samples #setdiff(1:num_samples, [23, 24, 25, 26, 27, 28])
+    @showprogress for ii in [41] #1:num_samples #setdiff(1:num_samples, [23, 24, 25, 26, 27, 28])
         # 1. Plot GOOP
         problem_data = JLD2.load_object("./data/relaxably_feasible/problem/rfp_$ii.jld2")
         filename = "rfp_$(ii)_sol.jld2"
@@ -366,6 +366,7 @@ function plot_trajectories(;num_samples = 100, num_penalty = 6)
         # Visualize trajectories
         warmstart_samples = 20
         for jj in 1:warmstart_samples 
+            Main.@infiltrate
             try
                 filename_w = "rfp_$(ii)_w$(jj)_sol.jld2"
                 goop_data = load_object("data/relaxably_feasible/GOOP_solution/$filename_w")
