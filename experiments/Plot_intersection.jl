@@ -231,11 +231,12 @@ function draw_intersection_closed_loop!(fig1, ax1, fig2, fig3, ax3, fig4, ax4, f
                 colormap = (:blues, 0.6), # transparency
                 colorrange = (0, 20),
                 linewidth = 2,
-                linestyle = (:dash, :dense)
+                linestyle = (:dash, :dense),
+                marker = :diamond
             )
         end
     end
-    plot_blue_trajectory(ax1)
+    plot_blue_trajectory(ax1; T = 4)
     Colorbar(fig1[6, 2:5], limits = (0, 20), flipaxis = false, label = "Vehicle 1's speed [m/s]", colormap = :blues, vertical = false)
 
     # Plot red trajectory: explicitly show distance-to-goal relaxation
@@ -254,11 +255,12 @@ function draw_intersection_closed_loop!(fig1, ax1, fig2, fig3, ax3, fig4, ax4, f
                 colormap = (:reds, 0.6), # transparency
                 colorrange = (0, 20),
                 linewidth = 2,
-                linestyle = (:dash, :dense)
+                linestyle = (:dash, :dense),
+                marker = :diamond
             )
         end
     end
-    plot_red_trajectory(ax1)
+    plot_red_trajectory(ax1; T = 4)
     Colorbar(fig1[1, 2:5], limits = (0, 20), flipaxis = true, label = "Vehicle 2's speed [m/s]", colormap = :reds, vertical = false)
 
     # # Visualize initial states 

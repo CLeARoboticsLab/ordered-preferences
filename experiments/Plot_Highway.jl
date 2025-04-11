@@ -46,6 +46,8 @@ function draw_highway_closed_loop!(fig1, lanes, fig2; n_time = 7, method = "GOOP
     closed_loop_goop_strategy2 = Vector{Float64}[]
     closed_loop_goop_strategy3 = Vector{Float64}[]
 
+    scale_factor = 27.778 # Scale factor for converting to real-world units (m/s)
+
     # 1. plot GOOP solution    
     for ii in 1:n_time
         if method == "GOOP"
@@ -60,7 +62,7 @@ function draw_highway_closed_loop!(fig1, lanes, fig2; n_time = 7, method = "GOOP
         goal_position = [0.9, 0.0]
 
         # add text
-        text!(lanes[ii], 0.05, 0.35, text = "T=$ii [s]", font=:bold, align=(:left, :top), offset=(4, -2), space=:relative, fontsize = 18)
+        text!(lanes[ii], 0.05, 0.35, text = "t=$(ii-1) [s]", font=:bold, align=(:left, :top), offset=(4, -2), space=:relative, fontsize = 18)
 
         # Visualize initial states
         scatter!(lanes[ii], Point2f(initial_state1), color = :blue, markersize = 20)
@@ -128,34 +130,34 @@ function draw_highway_closed_loop!(fig1, lanes, fig2; n_time = 7, method = "GOOP
             if ii == n_time
                 #Plot closed-loop data like speed, distance to goal
                 closed_loop_horizon =  n_time
-                blue_trajectory_xs = [data[1] for data in closed_loop_goop_strategy1]
-                blue_trajectory_ys = [data[2] for data in closed_loop_goop_strategy1]
-                blue_trajectory_vxs = [data[3] for data in closed_loop_goop_strategy1]
-                blue_trajectory_vys = [data[4] for data in closed_loop_goop_strategy1]
-                red_trajectory_xs = [data[1] for data in closed_loop_goop_strategy2]
-                red_trajectory_ys = [data[2] for data in closed_loop_goop_strategy2]
-                red_trajectory_vxs = [data[3] for data in closed_loop_goop_strategy2]
-                red_trajectory_vys = [data[4] for data in closed_loop_goop_strategy2]
-                green_trajectory_xs = [data[1] for data in closed_loop_goop_strategy3]
-                green_trajectory_ys = [data[2] for data in closed_loop_goop_strategy3]
-                green_trajectory_vxs = [data[3] for data in closed_loop_goop_strategy3]
-                green_trajectory_vys = [data[4] for data in closed_loop_goop_strategy3]
+                blue_trajectory_xs = [data[1] for data in closed_loop_goop_strategy1] .* scale_factor
+                blue_trajectory_ys = [data[2] for data in closed_loop_goop_strategy1] .* scale_factor
+                blue_trajectory_vxs = [data[3] for data in closed_loop_goop_strategy1] .* scale_factor 
+                blue_trajectory_vys = [data[4] for data in closed_loop_goop_strategy1] .* scale_factor
+                red_trajectory_xs = [data[1] for data in closed_loop_goop_strategy2] .* scale_factor
+                red_trajectory_ys = [data[2] for data in closed_loop_goop_strategy2] .* scale_factor
+                red_trajectory_vxs = [data[3] for data in closed_loop_goop_strategy2] .* scale_factor 
+                red_trajectory_vys = [data[4] for data in closed_loop_goop_strategy2] .* scale_factor 
+                green_trajectory_xs = [data[1] for data in closed_loop_goop_strategy3] .* scale_factor
+                green_trajectory_ys = [data[2] for data in closed_loop_goop_strategy3] .* scale_factor
+                green_trajectory_vxs = [data[3] for data in closed_loop_goop_strategy3] .* scale_factor
+                green_trajectory_vys = [data[4] for data in closed_loop_goop_strategy3] .* scale_factor
                 # 1a. Visualize horizontal speed
-                axis2 = Axis(fig2[1, 1]; xlabel = "time step", ylabel = "horizontal speed [m/s]", xgridvisible = false, ygridvisible = false)
+                axis2 = Axis(fig2[1, 1]; xlabel = "time step", ylabel = "longitudinal speed [m/s]", xgridvisible = false, ygridvisible = false)
                 scatterlines!(axis2, 0:closed_loop_horizon-1, blue_trajectory_vxs, label = "Vehicle 1", color = :blue)
                 scatterlines!(axis2, 0:closed_loop_horizon-1, red_trajectory_vxs, label = "Vehicle 2", color = :red)
                 scatterlines!(axis2, 0:closed_loop_horizon-1, green_trajectory_vxs, label = "Vehicle 3", color = :green)
-                lines!(axis2, 0:closed_loop_horizon-1, [0.2 for _ in 0:closed_loop_horizon-1], color = :black, linestyle = :dash)
+                lines!(axis2, 0:closed_loop_horizon-1, [0.2 * scale_factor for _ in 0:closed_loop_horizon-1], color = :black, linestyle = :dash)
 
                 # 1b. Visualize vertical speed
-                axis3 = Axis(fig2[1, 2]; xlabel = "time step", ylabel = "vertical speed [m/s]", xgridvisible = false, ygridvisible = false)
+                axis3 = Axis(fig2[1, 2]; xlabel = "time step", ylabel = "lateral speed [m/s]", xgridvisible = false, ygridvisible = false)
                 scatterlines!(axis3, 0:closed_loop_horizon-1, blue_trajectory_vys, label = "Vehicle 1", color = :blue)
                 scatterlines!(axis3, 0:closed_loop_horizon-1, red_trajectory_vys, label = "Vehicle 2", color = :red)
                 scatterlines!(axis3, 0:closed_loop_horizon-1, green_trajectory_vys, label = "Vehicle 3", color = :green)
-                lines!(axis3, 0:closed_loop_horizon-1, [0.2 for _ in 0:closed_loop_horizon-1], color = :black, linestyle = :dash)
+                lines!(axis3, 0:closed_loop_horizon-1, [0.2 * scale_factor for _ in 0:closed_loop_horizon-1], color = :black, linestyle = :dash)
 
                 # Visualize distance from goal position
-                axis4 = Axis(fig2[2, 1]; xlabel = "time step", ylabel = "goal-reaching error [m]", xgridvisible = false, ygridvisible = false)
+                axis4 = Axis(fig2[2, 1]; xlabel = "time step", ylabel = "Anticipated final distance to goal [m]", xgridvisible = false, ygridvisible = false)
                 closed_loop_strategy_end_position1 = Vector{Float64}[]
                 closed_loop_strategy_end_position2 = Vector{Float64}[]
                 closed_loop_strategy_end_position3 = Vector{Float64}[]
@@ -169,9 +171,9 @@ function draw_highway_closed_loop!(fig1, lanes, fig2; n_time = 7, method = "GOOP
                     push!(closed_loop_strategy_end_position2, data["strategy2"].xs[end])
                     push!(closed_loop_strategy_end_position3, data["strategy3"].xs[end])
                 end
-                scatterlines!(axis4, 0:closed_loop_horizon-1, [goal_position[1] - closed_loop_strategy_end_position1[k][1]  for k in 1:closed_loop_horizon], label = "Vehicle 1", color = :blue)
-                scatterlines!(axis4, 0:closed_loop_horizon-1, [goal_position[1] - closed_loop_strategy_end_position2[k][1] for k in 1:closed_loop_horizon], label = "Vehicle 2", color = :red)
-                scatterlines!(axis4, 0:closed_loop_horizon-1, [goal_position[1] - closed_loop_strategy_end_position3[k][1] for k in 1:closed_loop_horizon], label = "Vehicle 3", color = :green)
+                scatterlines!(axis4, 0:closed_loop_horizon-1, scale_factor .* [goal_position[1] - closed_loop_strategy_end_position1[k][1]  for k in 1:closed_loop_horizon], label = "Vehicle 1", color = :blue)
+                scatterlines!(axis4, 0:closed_loop_horizon-1, scale_factor .* [goal_position[1] - closed_loop_strategy_end_position2[k][1] for k in 1:closed_loop_horizon], label = "Vehicle 2", color = :red)
+                scatterlines!(axis4, 0:closed_loop_horizon-1, scale_factor .* [goal_position[1] - closed_loop_strategy_end_position3[k][1] for k in 1:closed_loop_horizon], label = "Vehicle 3", color = :green)
 
                 # Visualize distance between vehicles
                                  # Visualize distance between vehicles using closed-loop data
@@ -179,7 +181,7 @@ function draw_highway_closed_loop!(fig1, lanes, fig2; n_time = 7, method = "GOOP
                     xlabel = "time step",
                     ylabel = "inter-vehicle distance [m]",
                     xgridvisible = false, ygridvisible = false,
-                    limits = (nothing, (0, 1.5)),
+                    limits = (nothing, (0, 1.5 * scale_factor)),
                 )
                 
                 # Compute pairwise Euclidean distances for each time step
@@ -193,54 +195,49 @@ function draw_highway_closed_loop!(fig1, lanes, fig2; n_time = 7, method = "GOOP
                 # Plot the distances with distinct markers and solid lines
                 scatterlines!(axis5, 0:closed_loop_horizon-1, distances_12,
                     label = "Vehicle 1 & Vehicle 2",
-                    color = :blue,
                     marker = :circle,
                     markersize = 10,
                     linestyle = :solid
                 )
                 scatterlines!(axis5, 0:closed_loop_horizon-1, distances_13,
                     label = "Vehicle 1 & Vehicle 3",
-                    color = :red,
                     marker = :diamond,
                     markersize = 10,
                     linestyle = :solid
                 )
                 scatterlines!(axis5, 0:closed_loop_horizon-1, distances_23,
                     label = "Vehicle 2 & Vehicle 3",
-                    color = :green,
                     marker = :utriangle,
                     markersize = 10,
                     linestyle = :solid
                 )
-                
                 # Plot a dashed threshold line at distance 0.2 m
-                threshold = 0.2
+                threshold = 0.2 * scale_factor
                 lines!(axis5, 0:closed_loop_horizon-1, [threshold for _ in 0:closed_loop_horizon-1],
                     color = :black,
                     linestyle = :dash,
                     linewidth = 2,
                     label = "Collision Threshold"
                 )
-                
                 # Add annotation text to indicate that all distances are safe
                 min_distance = minimum(vcat(distances_12, distances_13, distances_23))
-                text!(axis5, 2.5, 0.20, text = "All inter-vehicle distances > 0.2 m (Safe)", align = (:center, :top), color = :black, fontsize = 12)
+                text!(axis5, 2.5, 0.18 * scale_factor, text = "All inter-vehicle distances > safety distance", align = (:center, :top), color = :black, fontsize = 12)
                 
                 axislegend(axis5)
+
+                fig2[3,1:2] = Legend(fig2, axis2, framevisible = false, orientation = :horizontal)
 
             end
         end
     end
     
-    # TODO: scale up the data (to fit real world scenario)
-
     return fig1, fig2
 end
 
 # Specify GOOP or Baseline
 method = "Baseline"
 # B1: [2500.0, 50.0, 1.0],    # α = 50
-# B2: [2500.0, 0.0, 0.0],    
+# B2: [2500.0, 0.0, 0.0],    # NOTE: Solver failure at T=8 time step for this baseline
 fig1, lanes = create_map(n_time = 7)
 fig2 = create_data_fig() # visualize speed, distance, etc.
 fig1, fig2 = draw_highway_closed_loop!(fig1, lanes, fig2; n_time = 7, method = method)
