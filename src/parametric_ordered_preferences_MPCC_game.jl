@@ -119,7 +119,7 @@ function ParametricOrderedPreferencesMPCCGame(;
             
             slacks_ii = last(z[Block(1)], slack_dimension_ii)
 
-            objective_ii = 5*sum(slacks_ii) #15
+            objective_ii = sum(slacks_ii) #15
 
             # auxillary constraint: fᵢ(x,θ) + sᵢ ≥ 0 
             auxillary_constraints = prioritized_constraints_ii(x, θ) .+ slacks_ii
@@ -425,7 +425,7 @@ function solve_relaxed_pop_game(
 
     complementarity_residual = 1.0
     converged_tolerance = 1e-6
-    PATH_tolerance = 5e-2 #2e-2
+    PATH_tolerance = 5e-3 #2e-2
 
     relaxations = ϵ * κ.^(0:max_iterations) # [1.0, 0.1, 0.01, ... 1e-10]
     ii = 1
@@ -435,37 +435,6 @@ function solve_relaxed_pop_game(
         augmented_parameters = vcat(parameters, ϵ)
 
         solution = solve(problem, augmented_parameters; PATH_tolerance, initial_guess, verbose)
-
-        if verbose
-            println("ii: ", ii)
-            println("status: ", solution.status)
-            # TODO: Automate T = 30 if N = 5, T = 60 if N = 10
-            T = 42
-            solution_primals = [solution.primals[i][1:T] for i in 1:length(problem.objectives)]
-            trajectory_primals = BlockArray(vcat(solution_primals...), [T, T, T])
-            println("P1 (x) trajectory: ", trajectory_primals[Block(1)][1:6:end])
-            println("P1 (y) trajectory: ", trajectory_primals[Block(1)][2:6:end])
-            println("P2 (x) trajectory: ", trajectory_primals[Block(2)][1:6:end])
-            println("P2 (y) trajectory: ", trajectory_primals[Block(2)][2:6:end])
-            println("P3 (x) trajectory: ", trajectory_primals[Block(3)][1:6:end])
-            println("P3 (y) trajectory: ", trajectory_primals[Block(3)][2:6:end])
-            println("P1 velocity: ", trajectory_primals[Block(1)][3:6:end])
-            println("P2 velocity: ", trajectory_primals[Block(2)][3:6:end])
-            println("P3 velocity: ", trajectory_primals[Block(3)][3:6:end])
-            # println("P1 slack at level 1: ", solution.primals[1][31])
-            # println("P1 slack at level 2: ", solution.primals[1][94:113])
-            # println("P2 slack at level 1: ", solution.primals[2][31:50])
-            # println("P2 slack at level 2: ", solution.primals[2][151])
-            println("Check collision w/ each other (1-2): ",
-                sqrt.((solution_primals[1][1:6:end] .- solution_primals[2][1:6:end]).^2 + 
-                    (solution_primals[1][2:6:end] .- solution_primals[2][2:6:end]).^2))
-            println("Check collision w/ each other (1-3): ",
-                sqrt.((solution_primals[1][1:6:end] .- solution_primals[3][1:6:end]).^2 + 
-                    (solution_primals[1][2:6:end] .- solution_primals[3][2:6:end]).^2))
-            println("Check collision w/ each other (2-3): ",
-                sqrt.((solution_primals[2][1:6:end] .- solution_primals[3][1:6:end]).^2 + 
-                    (solution_primals[2][2:6:end] .- solution_primals[3][2:6:end]).^2))
-        end
 
         if string(solution.status) != "MCP_Solved"
             printstyled("Could not solve relaxed problem at relaxation factor $(ii).\n"; color = :red)

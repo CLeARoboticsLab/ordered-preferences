@@ -37,7 +37,9 @@ end
 
 function create_data_fig()
     # Visualize vertical speed, horizontal speed, ...
-    fig = Figure(size = (700, 700))
+    # fig = Figure(size = (700, 700))
+    fig = Figure(size = (400, 1500))
+
     return fig
 end
 
@@ -150,14 +152,14 @@ function draw_highway_closed_loop!(fig1, lanes, fig2; n_time = 7, method = "GOOP
                 lines!(axis2, 0:closed_loop_horizon-1, [0.2 * scale_factor for _ in 0:closed_loop_horizon-1], color = :black, linestyle = :dash)
 
                 # 1b. Visualize vertical speed
-                axis3 = Axis(fig2[1, 2]; xlabel = "time step", ylabel = "lateral speed [m/s]", xgridvisible = false, ygridvisible = false)
+                axis3 = Axis(fig2[2, 1]; xlabel = "time step", ylabel = "lateral speed [m/s]", xgridvisible = false, ygridvisible = false)
                 scatterlines!(axis3, 0:closed_loop_horizon-1, blue_trajectory_vys, label = "Vehicle 1", color = :blue)
                 scatterlines!(axis3, 0:closed_loop_horizon-1, red_trajectory_vys, label = "Vehicle 2", color = :red)
                 scatterlines!(axis3, 0:closed_loop_horizon-1, green_trajectory_vys, label = "Vehicle 3", color = :green)
                 lines!(axis3, 0:closed_loop_horizon-1, [0.2 * scale_factor for _ in 0:closed_loop_horizon-1], color = :black, linestyle = :dash)
 
                 # Visualize distance from goal position
-                axis4 = Axis(fig2[2, 1]; xlabel = "time step", ylabel = "Anticipated final distance to goal [m]", xgridvisible = false, ygridvisible = false)
+                axis4 = Axis(fig2[3, 1]; xlabel = "time step", ylabel = "Anticipated final distance to goal [m]", xgridvisible = false, ygridvisible = false)
                 closed_loop_strategy_end_position1 = Vector{Float64}[]
                 closed_loop_strategy_end_position2 = Vector{Float64}[]
                 closed_loop_strategy_end_position3 = Vector{Float64}[]
@@ -175,9 +177,8 @@ function draw_highway_closed_loop!(fig1, lanes, fig2; n_time = 7, method = "GOOP
                 scatterlines!(axis4, 0:closed_loop_horizon-1, scale_factor .* [goal_position[1] - closed_loop_strategy_end_position2[k][1] for k in 1:closed_loop_horizon], label = "Vehicle 2", color = :red)
                 scatterlines!(axis4, 0:closed_loop_horizon-1, scale_factor .* [goal_position[1] - closed_loop_strategy_end_position3[k][1] for k in 1:closed_loop_horizon], label = "Vehicle 3", color = :green)
 
-                # Visualize distance between vehicles
-                                 # Visualize distance between vehicles using closed-loop data
-                axis5 = Axis(fig2[2, 2];
+                # Visualize distance between vehicles using closed-loop data
+                axis5 = Axis(fig2[4, 1];
                     xlabel = "time step",
                     ylabel = "inter-vehicle distance [m]",
                     xgridvisible = false, ygridvisible = false,
@@ -225,7 +226,7 @@ function draw_highway_closed_loop!(fig1, lanes, fig2; n_time = 7, method = "GOOP
                 
                 axislegend(axis5)
 
-                fig2[3,1:2] = Legend(fig2, axis2, framevisible = false, orientation = :horizontal)
+                fig2[5,1] = Legend(fig2, axis2, framevisible = false, orientation = :horizontal)
 
             end
         end
@@ -235,7 +236,7 @@ function draw_highway_closed_loop!(fig1, lanes, fig2; n_time = 7, method = "GOOP
 end
 
 # Specify GOOP or Baseline
-method = "Baseline"
+method = "GOOP"
 # B1: [2500.0, 50.0, 1.0],    # α = 50
 # B2: [2500.0, 0.0, 0.0],    # NOTE: Solver failure at T=8 time step for this baseline
 fig1, lanes = create_map(n_time = 7)
@@ -244,6 +245,6 @@ fig1, fig2 = draw_highway_closed_loop!(fig1, lanes, fig2; n_time = 7, method = m
 
 # Save the figure
 display(fig1)
-CairoMakie.save("./data/Highway_closed_loop/$(method)_plots/Highway_closed_loop2.pdf", fig1)
+CairoMakie.save("./data/Highway_closed_loop/$(method)_plots/Highway_closed_loop.pdf", fig1)
 display(fig2)
-CairoMakie.save("./data/Highway_closed_loop/$(method)_plots/Highway_closed_loop_data2.pdf", fig2)
+CairoMakie.save("./data/Highway_closed_loop/$(method)_plots/Highway_closed_loop_data.pdf", fig2)

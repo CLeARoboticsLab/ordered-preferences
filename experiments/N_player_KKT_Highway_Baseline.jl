@@ -196,7 +196,7 @@ function demo(; verbose = false, num_samples = 10, pareto = false)
     runtime = Float64[]
 
     # Run the baseline experiment
-    @showprogress desc="Running problem instances using baseline..." for ii in 1:num_samples #[39,97] #1:num_samples
+    @showprogress desc="Running problem instances using baseline..." for ii in 80:num_samples #[39,97] #1:num_samples
         penalty_cnt = 1
         println("-----------------------------------------------------")
         for penalty in penalties
@@ -243,7 +243,7 @@ function demo(; verbose = false, num_samples = 10, pareto = false)
                     if !pareto
                         JLD2.save_object("./data/relaxably_feasible/Baseline_solution/$penalty_cnt/rfp_$ii"*"_sol.jld2", solution_dict)
                     else
-                        JLD2.save_object("./data_pareto/Baseline_solution/$ii/rfp_$(ii)_baseline$penalty_cnt"*"_sol.jld2", solution_dict)
+                        JLD2.save_object("data/data_pareto/Baseline_solution/rfp_$(ii)_baseline$penalty_cnt"*"_sol.jld2", solution_dict)
                     end
                 end
 
@@ -353,12 +353,12 @@ function demo(; verbose = false, num_samples = 10, pareto = false)
                 end
             end
 
-            # Save not-converged instances
-            if !pareto
-                JLD2.save_object("./data/rfp_baseline_not_converged"*"_$penalty_cnt"*".jld2", Baseline_not_converged)
-            else
-                JLD2.save_object("./data/rfp_$(ii)_baseline_not_converged"*"_$penalty_cnt"*".jld2", Baseline_not_converged)
-            end
+            # # Save not-converged instances
+            # if !pareto
+            #     JLD2.save_object("./data/rfp_baseline_not_converged"*"_$penalty_cnt"*".jld2", Baseline_not_converged)
+            # else
+            #     JLD2.save_object("./data/rfp_$(ii)_baseline_not_converged"*"_$penalty_cnt"*".jld2", Baseline_not_converged)
+            # end
 
             # Update penalty_cnt
             penalty_cnt += 1
